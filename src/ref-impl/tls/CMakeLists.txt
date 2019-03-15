@@ -20,7 +20,7 @@ FILE (GLOB src_ref-impl_tls_SRCS
     ${PROJECT_SOURCE_DIR}/src/ref-impl/tls/library/*.c
 )
 
-ADD_LIBRARY (iot_tls SHARED
+ADD_LIBRARY (iot_tls STATIC
     ${src_ref-impl_tls_SRCS}
     ${EXTRA_C_SOURCES}
 )
