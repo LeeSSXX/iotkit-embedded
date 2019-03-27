@@ -629,7 +629,7 @@ static kv_file_t *kvfile = NULL;
 int HAL_Kv_Set(const char *key, const void *val, int len, int sync)
 {
     if (!kvfile) {
-        kvfile = kv_open("/etc/kvfile.db");
+        kvfile = kv_open("/data-rw/kvfile.db");
         if (!kvfile) {
             return -1;
         }
@@ -641,7 +641,7 @@ int HAL_Kv_Set(const char *key, const void *val, int len, int sync)
 int HAL_Kv_Get(const char *key, void *buffer, int *buffer_len)
 {
     if (!kvfile) {
-        kvfile = kv_open("/etc/kvfile.db");
+        kvfile = kv_open("/data-rw/kvfile.db");
         if (!kvfile) {
             return -1;
         }
@@ -653,7 +653,7 @@ int HAL_Kv_Get(const char *key, void *buffer, int *buffer_len)
 int HAL_Kv_Del(const char *key)
 {
     if (!kvfile) {
-        kvfile = kv_open("/etc/kvfile.db");
+        kvfile = kv_open("/data-rw/kvfile.db");
         if (!kvfile) {
             return -1;
         }
