@@ -348,15 +348,33 @@ int HAL_GetDeviceSecret(_OU_ char *device_secret)
     #endif
  *
  */
-int HAL_GetFirmwareVersion(_OU_ char *version)
-{
-    char *ver = "app-1.0.0-20180101.1000";
-    int len = strlen(ver);
+int HAL_GetFirmwareVersion(_OU_ char *version) {
     memset(version, 0x0, FIRMWARE_VERSION_MAXLEN);
-#ifdef __DEMO__
-    strncpy(version, ver, FIRMWARE_VERSION_MAXLEN);
-    version[len] = '\0';
-#endif
+
+    FILE *fp;
+    char verbuf[7] = {0};
+    char md5buf[32] = {0};
+    fp = popen("head -n1 /cdrom/syslinux.cfg|awk '{print $2}'", "r");
+    if (NULL != fp) {
+        fgets(verbuf, sizeof(verbuf), fp);
+    }
+    if (verbuf[0] != 'v') {
+        strcpy(verbuf, "v0.0.0");
+    }
+    fp = popen("cat /cdrom/syslinux.cfg |grep kernel|awk -F'/' '{print $2}'", "r");
+    if (NULL != fp) {
+        fgets(md5buf, sizeof(md5buf), fp);
+    }
+    if (strlen(md5buf) != 32) {
+        strcpy(md5buf, "abcdefghjklqwert1234567890123456");
+    }
+    pclose(fp);
+
+    strncpy(version, verbuf, strlen(verbuf));
+    strcat(version, "_");
+    strcat(version, md5buf + 16);
+    version[strlen(version) + 1] = '\0';
+
     return strlen(version);
 }
 
