@@ -504,6 +504,17 @@ int HAL_Firmware_Persistence_Stop(void)
     return 0;
 }
 
+int HAL_Firmware_Persistence_Error(void)
+{
+#ifdef __DEMO__
+    if (fp != NULL) {
+        fclose(fp);
+    }
+#endif
+
+    return 0;
+}
+
 int HAL_Config_Write(const char *buffer, int length)
 {
     FILE *fp;

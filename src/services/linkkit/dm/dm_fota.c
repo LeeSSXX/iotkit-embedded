@@ -63,7 +63,7 @@ static int _dm_fota_send_new_config_to_user(void *ota_handle)
 int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
 {
     int res = 0, file_download = 0;
-    uint32_t file_size = 0, file_downloaded = 0;
+    uint64_t file_size = 0, file_downloaded = 0;
     uint32_t percent_pre = 0, percent_now = 0;
     unsigned long long report_pre = 0, report_now = 0;
     dm_fota_ctx_t *ctx = _dm_fota_get_ctx();
@@ -97,7 +97,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         file_download = IOT_OTA_FetchYield(ota_handle, output, output_len, 1);
         if (file_download < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_FETCH_FAILED, NULL);
-            HAL_Firmware_Persistence_Stop();
+            HAL_Firmware_Persistence_Error();
             ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
@@ -129,7 +129,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
             uint32_t file_isvalid = 0;
             IOT_OTA_Ioctl(ota_handle, IOT_OTAG_CHECK_FIRMWARE, &file_isvalid, 4);
             if (file_isvalid == 0) {
-                HAL_Firmware_Persistence_Stop();
+                HAL_Firmware_Persistence_Error();
                 ctx->is_report_new_config = 0;
                 return FAIL_RETURN;
             } else {
@@ -138,7 +138,9 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         }
     }
 
-    HAL_Firmware_Persistence_Stop();
+    if(HAL_Firmware_Persistence_Stop() == 0){
+        IOT_OTA_ReportProgress(ota_handle,IOT_OTAP_BURN_FAILED,"Firmware burning failed");
+    }
     ctx->is_report_new_config = 0;
 
     return SUCCESS_RETURN;

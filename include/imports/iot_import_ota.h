@@ -45,5 +45,15 @@ DLL_HAL_API int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t 
  */
 DLL_HAL_API int HAL_Firmware_Persistence_Stop(void);
 
+/**
+ * @brief indicate firmware upgrade data error
+ *
+ * @param None.
+ * @return 0: Success; -1: Failure.
+ * @see None.
+ * @note None.
+ */
+DLL_HAL_API int HAL_Firmware_Persistence_Error(void);
+
 #endif  /* __IOT_IMPORT_UOTA_H__ */
 
