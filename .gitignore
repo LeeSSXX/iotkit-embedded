@@ -40,3 +40,4 @@ sdk-c/examples/linkkitapp
 sdk-c/examples/mqttapp
 
 .idea
+cmake-build-*
