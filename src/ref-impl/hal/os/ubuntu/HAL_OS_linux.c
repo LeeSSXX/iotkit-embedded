@@ -558,6 +558,8 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     old_version = strsep(&old_md5, "_");
     old_md5 = strsep(&old_md5, "_");
 
+    char *new_version_before_half = NULL;
+    new_version_before_half = strsep(&new_version, "_");
     strncpy(new_md5, ota_md5 + 16, 16);
 
     if (HAL_SHELL(mount_rw) != 0) {
@@ -609,7 +611,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
     snprintf(execute_cmd, sizeof(execute_cmd), "sed -i 's#%s#%s#g' %s && sed -i 's#%s#%s#g' %s && echo OK", old_md5,
              new_md5,
-             "/cdrom/syslinux.cfg", old_version, new_version, "/cdrom/syslinux.cfg");
+             "/cdrom/syslinux.cfg", old_version, new_version_before_half, "/cdrom/syslinux.cfg");
     if (HAL_SHELL(execute_cmd) != 0) {
         strcpy(state, "setting syslinux.cfg failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
