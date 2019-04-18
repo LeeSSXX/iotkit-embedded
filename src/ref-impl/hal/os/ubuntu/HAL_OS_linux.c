@@ -353,17 +353,21 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
 
     FILE *fp;
     char verbuf[7] = {0};
-    char md5buf[32] = {0};
+    char md5buf[33] = {0};
     fp = popen("head -n1 /cdrom/syslinux.cfg|awk '{print $2}'", "r");
     if (NULL != fp) {
-        fgets(verbuf, sizeof(verbuf), fp);
+        if (fgets(verbuf, sizeof(verbuf), fp) == NULL) {
+            strcpy(verbuf, "v0.0.0");
+        }
     }
     if (verbuf[0] != 'v') {
         strcpy(verbuf, "v0.0.0");
     }
     fp = popen("cat /cdrom/syslinux.cfg |grep kernel|awk -F'/' '{print $2}'", "r");
     if (NULL != fp) {
-        fgets(md5buf, sizeof(md5buf), fp);
+        if (fgets(md5buf, sizeof(md5buf), fp) == NULL) {
+            strcpy(md5buf, "abcdefghjklqwert1234567890123456");
+        }
     }
     if (strlen(md5buf) != 32) {
         strcpy(md5buf, "abcdefghjklqwert1234567890123456");
@@ -467,6 +471,26 @@ void HAL_ThreadDelete(_IN_ void *thread_handle)
     }
 }
 
+int HAL_SHELL(char *cmd) {
+    FILE *fp = NULL;
+    char buf[512] = {0};
+
+    if ((fp = popen(cmd, "r")) == NULL) {
+        hal_err("popen md failed\n");
+        return -1;
+    }
+    if (fgets(buf, sizeof(buf), fp) == NULL) {
+        strcpy(buf, "Failed");
+    }
+    if (strcmp("OK\n", buf) == 0) {
+        hal_info("HAL_SHELL:%s >>>OK", cmd);
+        return 0;
+    } else {
+        hal_err("HAL_SHELL:%s >>>Failed", cmd);
+        return -1;
+    }
+}
+
 static FILE *fp;
 
 #define otafilename "/tmp/alinkota.bin"
@@ -493,7 +517,7 @@ int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
     return 0;
 }
 
-int HAL_Firmware_Persistence_Stop(void)
+int HAL_Firmware_Persistence_Stop(char *ota_md5, _OU_ char *state)
 {
 #ifdef __DEMO__
     if (fp != NULL) {
@@ -501,6 +525,101 @@ int HAL_Firmware_Persistence_Stop(void)
     }
 #endif
 
+    memset(state, 0x0, 128);
+    char version[FIRMWARE_VERSION_MAXLEN] = {0};
+    char execute_cmd[256] = {0};
+    char *mount_cmd = "mount -o remount,rw / >/dev/null 2>&1 && echo OK";
+    char *umount_cmd = "umount -o remount,ro / >/dev/null 2>&1 && echo OK";
+    char *reboot_cmd = "";
+
+    if (HAL_GetFirmwareVersion(version) <= 0) {
+        strcpy(state, "get version info failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    char *old_md5 = version;
+    if (strsep(&old_md5, "_")) {
+        old_md5 = strsep(&old_md5, "_");
+    }
+
+    if (HAL_SHELL(mount_cmd) != 0) {
+        strcpy(state, "mount cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "rm -rf /cdrom/%s && mkdir /cdrom/%s >/dev/null 2>&1 && echo OK",
+             ota_md5,
+             ota_md5);
+    if (HAL_SHELL(execute_cmd)) {
+        strcpy(state, "mkdir /cdrom/ota_md5 execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "tar zxf %s -C /cdrom/%s >/dev/null 2>&1 && echo OK", otafilename,
+             ota_md5);
+    if (HAL_SHELL(execute_cmd) != 0) {
+        strcpy(state, "tar cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "chmod +x /cdrom/%s/filesystem.squashfs.sh && echo OK", ota_md5);
+    if (HAL_SHELL(execute_cmd)) {
+        strcpy(state, "chmod squashfs file failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "/cdrom/%s/filesystem.squashfs.sh", ota_md5);
+    if (HAL_SHELL(execute_cmd)) {
+        strcpy(state, "download squashfs failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "sed -i 's#%s#%s#g' %s && echo OK", old_md5, ota_md5,
+             "/cdrom/syslinux.cfg");
+    if (HAL_SHELL(execute_cmd) != 0) {
+        strcpy(state, "setting syslinux.cfg failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "chmod +x /cdrom/%s/install.sh && echo OK", ota_md5);
+    if (HAL_SHELL(execute_cmd) != 0) {
+        strcpy(state, "chmod install.sh file failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "/cdrom/%s/install.sh", ota_md5);
+    if (HAL_SHELL(execute_cmd)) {
+        strcpy(state, "execute install.sh failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    if (HAL_SHELL(umount_cmd) != 0) {
+        strcpy(state, "umount cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    if (HAL_SHELL(reboot_cmd) != 0) {
+        strcpy(state, "reboot cmd plan failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
     return 0;
 }
 

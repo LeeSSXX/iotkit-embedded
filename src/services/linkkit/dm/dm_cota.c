@@ -134,7 +134,7 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
         file_download = IOT_OTA_FetchYield(ota_handle, output, output_len, 1);
         if (file_download < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_FETCH_FAILED, NULL);
-            HAL_Firmware_Persistence_Stop();
+            HAL_Firmware_Persistence_Error();
             ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
@@ -166,7 +166,7 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
             uint32_t file_isvalid = 0;
             IOT_OTA_Ioctl(ota_handle, IOT_OTAG_CHECK_CONFIG, &file_isvalid, 4);
             if (file_isvalid == 0) {
-                HAL_Firmware_Persistence_Stop();
+                HAL_Firmware_Persistence_Error();
                 ctx->is_report_new_config = 0;
                 return FAIL_RETURN;
             } else {
@@ -175,7 +175,7 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
         }
     }
 
-    HAL_Firmware_Persistence_Stop();
+    //HAL_Firmware_Persistence_Stop();
     ctx->is_report_new_config = 0;
 
     return SUCCESS_RETURN;
