@@ -72,6 +72,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     char version[FIRMWARE_VERSION_MAXLEN] = {0};
     char ota_md5[33] = {0};
     char state[128] = {0};
+    char new_version[FIRMWARE_VERSION_MAXLEN] = {0};
 
     if (output == NULL || output_len <= 0) {
         return DM_INVALID_PARAMETER;
@@ -92,6 +93,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         return FAIL_RETURN;
     }
 
+    IOT_OTA_Ioctl(ota_handle, IOT_OTAG_VERSION, new_version, FIRMWARE_VERSION_MAXLEN);
     /* reset the size_fetched in ota_handle to be 0 */
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_RESET_FETCHED_SIZE, ota_handle, 4);
     /* Prepare Write Data To Storage */
@@ -142,7 +144,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     }
 
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_MD5SUM, ota_md5, 33);
-    if (HAL_Firmware_Persistence_Stop(ota_md5, state) != 0) {
+    if (HAL_Firmware_Persistence_Stop(new_version, ota_md5, state) != 0) {
         IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, state);
         return FAIL_RETURN;
     } else {

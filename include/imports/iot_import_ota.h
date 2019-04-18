@@ -43,7 +43,7 @@ DLL_HAL_API int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t 
  * @see None.
  * @note None.
  */
-DLL_HAL_API int HAL_Firmware_Persistence_Stop(char *ota_md5, _OU_ char *state);
+DLL_HAL_API int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *state);
 
 /**
  * @brief indicate firmware upgrade data error
