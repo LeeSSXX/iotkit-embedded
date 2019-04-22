@@ -146,10 +146,12 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_MD5SUM, ota_md5, 33);
     if (HAL_Firmware_Persistence_Stop(new_version, ota_md5, state) != 0) {
         IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, state);
+        ctx->is_report_new_config = 0;
         return FAIL_RETURN;
     } else {
         if (HAL_GetFirmwareVersion(version) <= 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, "get version info failed\n");
+            ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
         IOT_OTA_ReportVersion(ota_handle, version);
