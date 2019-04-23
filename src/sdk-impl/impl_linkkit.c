@@ -764,28 +764,32 @@ static void _iotx_linkkit_event_callback(iotx_dm_event_types_t type, char *paylo
         }
         break;
         case IOTX_DM_EVENT_GATEWAY_PERMIT: {
-            char *product_key = NULL;
+            char *product_key = "";
 
-            if (payload == NULL || lite_item_pk.type != cJSON_String || lite_item_time.type != cJSON_Number) {
+            if (payload == NULL || lite_item_time.type != cJSON_Number) {
                 return;
             }
-            sdk_debug("Current Product Key: %.*s", lite_item_pk.value_length, lite_item_pk.value);
             sdk_debug("Current Time: %d", lite_item_time.value_int);
 
-            product_key = IMPL_LINKKIT_MALLOC(lite_item_pk.value_length + 1);
-            if (product_key == NULL) {
-                sdk_err("Not Enough Memory");
-                return;
+            if (lite_item_pk.type == cJSON_String) {
+                sdk_debug("Current Product Key: %.*s", lite_item_pk.value_length, lite_item_pk.value);
+                product_key = IMPL_LINKKIT_MALLOC(lite_item_pk.value_length + 1);
+                if (product_key == NULL) {
+                    sdk_err("Not Enough Memory");
+                    return;
+                }
+                memset(product_key, 0, lite_item_pk.value_length + 1);
+                memcpy(product_key, lite_item_pk.value, lite_item_pk.value_length);
             }
-            memset(product_key, 0, lite_item_pk.value_length + 1);
-            memcpy(product_key, lite_item_pk.value, lite_item_pk.value_length);
 
             callback = iotx_event_callback(ITE_PERMIT_JOIN);
             if (callback) {
                 ((int (*)(const char *, int))callback)((const char *)product_key, (const int)lite_item_time.value_int);
             }
 
-            IMPL_LINKKIT_FREE(product_key);
+            if (lite_item_pk.type == cJSON_String) {
+                IMPL_LINKKIT_FREE(product_key);
+            }
         }
         break;
 #endif
@@ -1189,6 +1193,9 @@ void IOT_Linkkit_Yield(int timeout_ms)
 int IOT_Linkkit_Close(int devid)
 {
     int res = 0;
+#ifdef DEV_BIND_ENABLED
+    extern int awss_bind_deinit(void);
+#endif
 
     if (devid < 0) {
         sdk_err("Invalid Parameter");
@@ -1197,6 +1204,9 @@ int IOT_Linkkit_Close(int devid)
 
     if (devid == IOTX_DM_LOCAL_NODE_DEVID) {
         res = _iotx_linkkit_master_close();
+#ifdef DEV_BIND_ENABLED
+        awss_bind_deinit();
+#endif
     } else {
 #ifdef DEVICE_MODEL_GATEWAY
         res = _iotx_linkkit_slave_close(devid);
@@ -1403,7 +1413,8 @@ int IOT_Linkkit_Report(int devid, iotx_linkkit_msg_type_t msg_type, unsigned cha
 #else
             res = FAIL_RETURN;
 #endif
-        } break;
+        }
+        break;
         default: {
             sdk_err("Unknown Message Type");
             res = FAIL_RETURN;
