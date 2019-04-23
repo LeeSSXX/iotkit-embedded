@@ -569,6 +569,16 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     }
 
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "find /cdrom -type d|grep -E '/cdrom/'|grep -v '%s'|xargs rm -rf 2>&1 && echo OK",
+             old_md5);
+    if (HAL_SHELL(execute_cmd)) {
+        strcpy(state, "rm old dir execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        HAL_Firmware_Persistence_Failed(new_md5);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
     snprintf(execute_cmd, sizeof(execute_cmd), "rm -rf /cdrom/%s && mkdir /cdrom/%s >/dev/null 2>&1 && echo OK",
              new_md5,
              new_md5);
