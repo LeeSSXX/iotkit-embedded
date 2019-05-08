@@ -603,7 +603,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     }
 
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "tar --no-same-owner -zxf %s -C /cdrom/%s >/dev/null 2>&1 && echo OK",
+    snprintf(execute_cmd, sizeof(execute_cmd), "tar --no-same-owner -xf %s -C /cdrom/%s >/dev/null 2>&1 && echo OK",
              otafilename,
              new_md5);
     if (HAL_SHELL(execute_cmd) != 0) {
