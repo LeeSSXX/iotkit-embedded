@@ -540,27 +540,39 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
 #endif
 
     memset(state, 0x0, 128);
-    char version[FIRMWARE_VERSION_MAXLEN] = {0};
+    char old_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
+    char old_version_number_strsep[FIRMWARE_VERSION_MAXLEN] = {0};
+    char new_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
     char new_md5[16 + 1] = {0};
     char execute_cmd[256] = {0};
     char *mount_rw = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
     char *mount_ro = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
-    if (HAL_GetFirmwareVersion(version) <= 0) {
-        strcpy(state, "get version info failed\n");
+    if (HAL_GetFirmwareVersion(old_version_number) <= 0) {
+        strcpy(state, "get old_version_number info failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
     }
 
+    strncpy(old_version_number_strsep, old_version_number, FIRMWARE_VERSION_MAXLEN);
     char *old_version = NULL;
-    char *old_md5 = version;
+    char *old_md5 = old_version_number_strsep;
     old_version = strsep(&old_md5, "_");
     old_md5 = strsep(&old_md5, "_");
 
     char *new_version_before_half = NULL;
+
     new_version_before_half = strsep(&new_version, "_");
     strncpy(new_md5, ota_md5 + 16, 16);
+
+    strncpy(new_version_number, new_version_before_half, 6);
+    strncat(new_version_number, "_", 1);
+    strncat(new_version_number, ota_md5 + 16, 16);
+
+    if (strcmp(old_version_number, new_version_number) == 0) {
+        return 0;
+    }
 
     if (HAL_SHELL(mount_rw) != 0) {
         strcpy(state, "mount rw execute failed\n");
