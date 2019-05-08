@@ -571,6 +571,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     strncat(new_version_number, ota_md5 + 16, 16);
 
     if (strcmp(old_version_number, new_version_number) == 0) {
+        hal_warning("The version is up to date.");
         return 0;
     }
 
