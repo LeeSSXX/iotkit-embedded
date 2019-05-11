@@ -357,11 +357,11 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
     fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`2", "r");
     if (NULL != fp) {
         if (fgets(verbuf, sizeof(verbuf), fp) == NULL) {
-            strcpy(verbuf, "v0.0.0");
+            strcpy(verbuf, "v0.0.0\n");
         }
     }
     if (verbuf[0] != 'v') {
-        strcpy(verbuf, "v0.0.0");
+        strcpy(verbuf, "v0.0.0\n");
     }
     verbuf[strlen(verbuf) - 1] = '\0';
     fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`3", "r");
