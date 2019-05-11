@@ -352,9 +352,9 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
     memset(version, 0x0, FIRMWARE_VERSION_MAXLEN);
 
     FILE *fp;
-    char verbuf[6 + 1] = {0};
+    char verbuf[FIRMWARE_VERSION_MAXLEN] = {0};
     char md5buf[16 + 1] = {0};
-    fp = popen("head -n1 /cdrom/syslinux.cfg|awk '{print $2}'", "r");
+    fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`2", "r");
     if (NULL != fp) {
         if (fgets(verbuf, sizeof(verbuf), fp) == NULL) {
             strcpy(verbuf, "v0.0.0");
@@ -363,14 +363,15 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
     if (verbuf[0] != 'v') {
         strcpy(verbuf, "v0.0.0");
     }
-    fp = popen("cat /cdrom/syslinux.cfg |grep kernel|awk -F'/' '{print $2}'", "r");
+    verbuf[strlen(verbuf) - 1] = '\0';
+    fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`3", "r");
     if (NULL != fp) {
         if (fgets(md5buf, sizeof(md5buf), fp) == NULL) {
-            strcpy(md5buf, "1234567890123456");
+            strcpy(md5buf, "0000000000000000");
         }
     }
     if (strlen(md5buf) != 16) {
-        strcpy(md5buf, "1234567890123456");
+        strcpy(md5buf, "0000000000000000");
     }
     pclose(fp);
 
@@ -471,7 +472,10 @@ void HAL_ThreadDelete(_IN_ void *thread_handle)
     }
 }
 
-int HAL_SHELL(char *cmd) {
+int HAL_Shell(char *cmd, _OU_ char *result, int result_len) {
+    if (result != NULL && result_len != 0) {
+        memset(result, 0x0, result_len);
+    }
     FILE *fp = NULL;
     char buf[512] = {0};
 
@@ -482,11 +486,16 @@ int HAL_SHELL(char *cmd) {
     if (fgets(buf, sizeof(buf), fp) == NULL) {
         strcpy(buf, "Failed");
     }
+    if (result != NULL && result_len != 0) {
+        strncpy(result, buf, result_len);
+        result[result_len] = '\0';
+        return 0;
+    }
     if (strcmp("OK\n", buf) == 0) {
-        hal_info("HAL_SHELL:%s >>>OK", cmd);
+        hal_info("HAL_Shell:%s >>>OK", cmd);
         return 0;
     } else {
-        hal_err("HAL_SHELL:%s >>>Failed", cmd);
+        hal_err("HAL_Shell:%s >>>Failed", cmd);
         return -1;
     }
 }
@@ -517,17 +526,15 @@ int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
     return 0;
 }
 
-void HAL_Firmware_Persistence_Failed(char *new_md5) {
-    char execute_cmd[256] = {0};
-    char *mount_ro = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
+void HAL_Firmware_Persistence_Failed(int err) {
+    char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
+    char *umount_cmd = "umount /os >/dev/null 2>&1 && echo OK";
 
-    memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "rm -rf /cdrom/%s >/dev/null 2>&1 && echo OK", new_md5);
-    if (HAL_SHELL(execute_cmd)) {
-        hal_err("HAL_Firmware_Persistence_Failed:rm /cdrom/new_md5 execute failed");
+    if (HAL_Shell(umount_cmd, NULL, 0) != 0 && err == 1) {
+        hal_err("HAL_Firmware_Persistence_Failed:mount ro execute failed");
     }
 
-    if (HAL_SHELL(mount_ro) != 0) {
+    if (HAL_Shell(mount_ro_cmd, NULL, 0) != 0 && err == 2) {
         hal_err("HAL_Firmware_Persistence_Failed:mount ro execute failed");
     }
 }
@@ -541,12 +548,15 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
 
     memset(state, 0x0, 128);
     char old_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
-    char old_version_number_strsep[FIRMWARE_VERSION_MAXLEN] = {0};
     char new_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
+    char disk_volume[8 + 1] = {0};
+    char disk_number[1 + 1] = {0};
     char new_md5[16 + 1] = {0};
     char execute_cmd[256] = {0};
-    char *mount_rw = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
-    char *mount_ro = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
+    char *mount_rw_cmd = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
+    char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
+    char *disk_volume_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 1-8";
+    char *disk_number_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 9-9";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
     if (HAL_GetFirmwareVersion(old_version_number) <= 0) {
@@ -555,17 +565,9 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         return -1;
     }
 
-    strncpy(old_version_number_strsep, old_version_number, FIRMWARE_VERSION_MAXLEN);
-    char *old_version = NULL;
-    char *old_md5 = old_version_number_strsep;
-    old_version = strsep(&old_md5, "_");
-    old_md5 = strsep(&old_md5, "_");
-
     char *new_version_before_half = NULL;
-
     new_version_before_half = strsep(&new_version, "_");
     strncpy(new_md5, ota_md5 + 16, 16);
-
     strncpy(new_version_number, new_version_before_half, 6);
     strncat(new_version_number, "_", 1);
     strncat(new_version_number, ota_md5 + 16, 16);
@@ -575,62 +577,98 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         return 0;
     }
 
-    if (HAL_SHELL(mount_rw) != 0) {
+    if (HAL_Shell(disk_volume_cmd, disk_volume, 8) != 0) {
+        strcpy(state, "disk_volume_cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    if (HAL_Shell(disk_number_cmd, disk_number, 1) != 0) {
+        strcpy(state, "disk_volume_cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd),
+             "mkfs.ext4 -F %s%d >/dev/null 2>&1 && echo OK", disk_volume,
+             atoi(disk_number) == 3 ? 2 : 3);
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "mkfs.ext4 disk failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "[ -d /os ] ||  mkdir /os && mount %s%d /os >/dev/null 2>&1 && echo OK",
+             disk_volume,
+             atoi(disk_number) == 3 ? 2 : 3);
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "mount disk failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "tar --no-same-owner -xf %s -C /os/ >/dev/null 2>&1 && echo OK",
+             otafilename);
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "tar cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        HAL_Firmware_Persistence_Failed(1);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd),
+             "mkdir /os/.disk && echo '9c731d65-3095-489c-acae-f9be2cddc671' > /os/.disk/casper-uuid-generic 2>/dev/null && echo OK");
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "tar cmd execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        HAL_Firmware_Persistence_Failed(1);
+        return -1;
+    }
+
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "umount /os >/dev/null 2>&1 && echo OK");
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "umount execute failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        HAL_Firmware_Persistence_Failed(1);
+        return -1;
+    }
+
+    if (HAL_Shell(mount_rw_cmd, NULL, 0) != 0) {
         strcpy(state, "mount rw execute failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
     }
 
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "find /cdrom -type d|grep -E '/cdrom/'|grep -v '%s'|xargs rm -rf 2>&1 && echo OK",
-             old_md5);
-    if (HAL_SHELL(execute_cmd)) {
-        strcpy(state, "rm old dir execute failed\n");
+    snprintf(execute_cmd, sizeof(execute_cmd), "rm -f /cdrom/.disk/casper-uuid-generic >/dev/null 2>&1 && echo OK");
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "delete old casper-uuid-generic failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
-        HAL_Firmware_Persistence_Failed(new_md5);
+        HAL_Firmware_Persistence_Failed(2);
         return -1;
     }
 
-    memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "rm -rf /cdrom/%s && mkdir /cdrom/%s >/dev/null 2>&1 && echo OK",
-             new_md5,
-             new_md5);
-    if (HAL_SHELL(execute_cmd)) {
-        strcpy(state, "mkdir /cdrom/new_md5 execute failed\n");
-        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
-        HAL_Firmware_Persistence_Failed(new_md5);
-        return -1;
-    }
-
-    memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "tar --no-same-owner -xf %s -C /cdrom/%s >/dev/null 2>&1 && echo OK",
-             otafilename,
-             new_md5);
-    if (HAL_SHELL(execute_cmd) != 0) {
-        strcpy(state, "tar cmd execute failed\n");
-        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
-        HAL_Firmware_Persistence_Failed(new_md5);
-        return -1;
-    }
-
-    memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "sed -i 's#%s#%s#g' %s && sed -i 's#%s#%s#g' %s && echo OK", old_md5,
-             new_md5,
-             "/cdrom/syslinux.cfg", old_version, new_version_before_half, "/cdrom/syslinux.cfg");
-    if (HAL_SHELL(execute_cmd) != 0) {
-        strcpy(state, "setting syslinux.cfg failed\n");
-        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
-        HAL_Firmware_Persistence_Failed(new_md5);
-        return -1;
-    }
-
-    if (HAL_SHELL(mount_ro) != 0) {
+    if (HAL_Shell(mount_ro_cmd, NULL, 0) != 0) {
         strcpy(state, "mount ro execute failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
     }
 
-    if (HAL_SHELL(reboot_cmd) != 0) {
+    memset(execute_cmd, 0x0, sizeof(execute_cmd));
+    snprintf(execute_cmd, sizeof(execute_cmd), "e2label %s2 %s && e2label %s3 %s 2>&1 && echo OK", disk_volume,
+             new_version_before_half, disk_volume, new_md5);
+    if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
+        strcpy(state, "e2label update version failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
+    }
+
+    if (HAL_Shell(reboot_cmd, NULL, 0) != 0) {
         strcpy(state, "reboot cmd plan failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
