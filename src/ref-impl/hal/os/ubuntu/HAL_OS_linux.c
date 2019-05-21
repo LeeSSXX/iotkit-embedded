@@ -489,13 +489,16 @@ int HAL_Shell(char *cmd, _OU_ char *result, int result_len) {
     if (result != NULL && result_len != 0) {
         strncpy(result, buf, result_len);
         result[result_len] = '\0';
+        fclose(fp);
         return 0;
     }
     if (strcmp("OK\n", buf) == 0) {
         hal_info("HAL_Shell:%s >>>OK", cmd);
+        fclose(fp);
         return 0;
     } else {
         hal_err("HAL_Shell:%s >>>Failed", cmd);
+        fclose(fp);
         return -1;
     }
 }
