@@ -39,7 +39,7 @@ static int _dm_cota_send_new_config_to_user(void *ota_handle)
     uint32_t config_size = 0;
     char *config_id = NULL, *sign = NULL, *sign_method = NULL, *url = NULL, *get_type = NULL;
     const char *cota_new_config_fmt =
-                "{\"configId\":\"%s\",\"configSize\":%d,\"getType\":\"%s\",\"sign\":\"%s\",\"signMethod\":\"%s\",\"url\":\"%s\"}";
+            "{\"configId\":\"%s\",\"configSize\":%d,\"getType\":\"%s\",\"sign\":\"%s\",\"signMethod\":\"%s\",\"url\":\"%s\"}";
 
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_COTA_CONFIG_ID, (void *)&config_id, 1);
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_COTA_CONFIG_SIZE, &config_size, 4);
@@ -76,7 +76,7 @@ static int _dm_cota_send_new_config_to_user(void *ota_handle)
     }
 
     res = SUCCESS_RETURN;
-ERROR:
+    ERROR:
     if (config_id) {
         DM_COTA_FREE(config_id);
     }
@@ -128,19 +128,19 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
     /* reset the size_fetched in ota_handle to be 0 */
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_RESET_FETCHED_SIZE, ota_handle, 4);
     /* Prepare Write Data To Storage */
-    HAL_Firmware_Persistence_Start();
+    HAL_Config_Persistence_Start();
 
     while (1) {
         file_download = IOT_OTA_FetchYield(ota_handle, output, output_len, 1);
         if (file_download < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_FETCH_FAILED, NULL);
-            HAL_Firmware_Persistence_Error();
+            HAL_Config_Persistence_Error();
             ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
 
         /* Write Config File Into Stroage */
-        HAL_Firmware_Persistence_Write(output, file_download);
+        HAL_Config_Persistence_Write(output, file_download);
 
         /* Get OTA information */
         IOT_OTA_Ioctl(ota_handle, IOT_OTAG_FETCHED_SIZE, &file_downloaded, 4);
@@ -166,7 +166,7 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
             uint32_t file_isvalid = 0;
             IOT_OTA_Ioctl(ota_handle, IOT_OTAG_CHECK_CONFIG, &file_isvalid, 4);
             if (file_isvalid == 0) {
-                HAL_Firmware_Persistence_Error();
+                HAL_Config_Persistence_Error();
                 IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_CHECK_FALIED, NULL);
                 ctx->is_report_new_config = 0;
                 return FAIL_RETURN;
@@ -176,7 +176,7 @@ int dm_cota_perform_sync(_OU_ char *output, _IN_ int output_len)
         }
     }
 
-    //HAL_Firmware_Persistence_Stop();
+    HAL_Config_Persistence_Stop();
     ctx->is_report_new_config = 0;
 
     return SUCCESS_RETURN;

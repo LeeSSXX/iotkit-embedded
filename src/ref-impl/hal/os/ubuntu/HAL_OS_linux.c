@@ -35,10 +35,10 @@
 #define __DEMO__
 
 #ifdef __DEMO__
-    char _product_key[PRODUCT_KEY_LEN + 1];
-    char _product_secret[PRODUCT_SECRET_LEN + 1];
-    char _device_name[DEVICE_NAME_LEN + 1];
-    char _device_secret[DEVICE_SECRET_LEN + 1];
+char _product_key[PRODUCT_KEY_LEN + 1];
+char _product_secret[PRODUCT_SECRET_LEN + 1];
+char _device_name[DEVICE_NAME_LEN + 1];
+char _device_secret[DEVICE_SECRET_LEN + 1];
 #endif
 
 void *HAL_MutexCreate(void)
@@ -439,11 +439,11 @@ int HAL_SemaphoreWait(_IN_ void *sem, _IN_ uint32_t timeout_ms)
 }
 
 int HAL_ThreadCreate(
-            _OU_ void **thread_handle,
-            _IN_ void *(*work_routine)(void *),
-            _IN_ void *arg,
-            _IN_ hal_os_thread_param_t *hal_os_thread_param,
-            _OU_ int *stack_used)
+        _OU_ void **thread_handle,
+        _IN_ void *(*work_routine)(void *),
+        _IN_ void *arg,
+        _IN_ hal_os_thread_param_t *hal_os_thread_param,
+        _OU_ int *stack_used)
 {
     int ret = -1;
 
@@ -506,6 +506,13 @@ int HAL_Shell(char *cmd, _OU_ char *result, int result_len) {
 static FILE *fp;
 
 #define otafilename "/tmp/alinkota.bin"
+#define configfile "/data-rw/agent-proxy.conf"
+
+void HAL_Config_Persistence_Start(void)
+{
+    fp = fopen(configfile, "w");
+    return;
+}
 
 void HAL_Firmware_Persistence_Start(void)
 {
@@ -514,6 +521,17 @@ void HAL_Firmware_Persistence_Start(void)
     //    assert(fp);
 #endif
     return;
+}
+
+int HAL_Config_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
+{
+    unsigned int written_len = 0;
+    written_len = fwrite(buffer, 1, length, fp);
+
+    if (written_len != length) {
+        return -1;
+    }
+    return 0;
 }
 
 int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
@@ -540,6 +558,13 @@ void HAL_Firmware_Persistence_Failed(int err) {
     if (HAL_Shell(mount_ro_cmd, NULL, 0) != 0 && err == 2) {
         hal_err("HAL_Firmware_Persistence_Failed:mount ro execute failed");
     }
+}
+
+int HAL_Config_Persistence_Stop() {
+    if (fp != NULL) {
+        fclose(fp);
+    }
+    return 0;
 }
 
 int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *state) {
@@ -679,6 +704,14 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     return 0;
 }
 
+int HAL_Config_Persistence_Error(void)
+{
+    if (fp != NULL) {
+        fclose(fp);
+    }
+    return 0;
+}
+
 int HAL_Firmware_Persistence_Error(void)
 {
 #ifdef __DEMO__
@@ -784,7 +817,7 @@ char *_get_default_routing_ifname(char *ifname, int ifname_size)
         }
     }
 
-out:
+    out:
     if (fp) {
         fclose(fp);
     }
