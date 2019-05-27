@@ -585,6 +585,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
     char *disk_volume_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 1-8";
     char *disk_number_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 9-9";
+    char *before_reboot_cmd = "/data-rw/before_reboot && > /dev/null 2>&1;echo OK";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
     if (HAL_GetFirmwareVersion(old_version_number) <= 0) {
@@ -696,6 +697,11 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         return -1;
     }
 
+    if (HAL_Shell(before_reboot_cmd, NULL, 0) != 0) {
+        strcpy(state, "before reboot cmd plan failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+    }
+    
     if (HAL_Shell(reboot_cmd, NULL, 0) != 0) {
         strcpy(state, "reboot cmd plan failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
