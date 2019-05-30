@@ -7,7 +7,7 @@ PROJECT (iotkit-embedded-V2.3.0 C)
 
 SET (EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin)
 SET (LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib)
-SET (CMAKE_C_FLAGS " -Iexamples -Iexamples/linkkit -Itests -Os -Wall -fPIC")
+SET (CMAKE_C_FLAGS " -Os -Wall -fPIC")
 
 IF (WIN32)
     SET (CMAKE_EXE_LINKER_FLAGS "-L${PROJECT_SOURCE_DIR}/prebuilt/win7/libs")
