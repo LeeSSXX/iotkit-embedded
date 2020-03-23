@@ -96,6 +96,8 @@ typedef enum {
     IOTX_DM_EVENT_FOTA_NEW_FIRMWARE,
     IOTX_DM_EVENT_NTP_RESPONSE,
     IOTX_DM_EVENT_RRPC_REQUEST,
+    IOTX_DM_EVENT_CLOUD_ERROR,
+    IOTX_DM_EVENT__THING_EVENT_NOTIFY,
     IOTX_DM_EVENT_MAX
 } iotx_dm_event_types_t;
 
@@ -196,7 +198,6 @@ int iotx_dm_send_rrpc_response(_IN_ int devid, _IN_ char *msgid, _IN_ int msgid_
 int iotx_dm_deviceinfo_update(_IN_ int devid, _IN_ char *payload, _IN_ int payload_len);
 int iotx_dm_deviceinfo_delete(_IN_ int devid, _IN_ char *payload, _IN_ int payload_len);
 int iotx_dm_qurey_ntp(void);
-int iotx_dm_send_aos_active(int devid);
 #endif
 
 int iotx_dm_cota_perform_sync(_OU_ char *buffer, _IN_ int buffer_len);
@@ -206,6 +207,9 @@ int iotx_dm_fota_request_image(_IN_ const char *version, _IN_ int buffer_len);
 
 #ifdef DEVICE_MODEL_GATEWAY
 int iotx_dm_query_topo_list(void);
+int iotx_dm_subdev_query(_IN_ char product_key[IOTX_PRODUCT_KEY_LEN + 1],
+                         _IN_ char device_name[IOTX_DEVICE_NAME_LEN + 1],
+                         _OU_ int *devid);
 int iotx_dm_subdev_create(_IN_ char product_key[PRODUCT_KEY_MAXLEN], _IN_ char device_name[DEVICE_NAME_MAXLEN],
                           _IN_ char device_secret[DEVICE_SECRET_MAXLEN], _OU_ int *devid);
 int iotx_dm_subdev_destroy(_IN_ int devid);

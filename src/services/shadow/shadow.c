@@ -209,7 +209,8 @@ iotx_err_t IOT_Shadow_Push(
 {
     iotx_shadow_ack_code_t ack_update = IOTX_SHADOW_ACK_NONE;
     iotx_shadow_pt pshadow = (iotx_shadow_pt)handle;
-
+    int ret;
+    int cnt = 0;
     if ((NULL == pshadow) || (NULL == data)) {
         return NULL_VALUE_ERROR;
     }
@@ -220,11 +221,16 @@ iotx_err_t IOT_Shadow_Push(
     }
 
     /* update asynchronously */
-    IOT_Shadow_Push_Async(pshadow, data, data_len, timeout_s, iotx_update_ack_cb, &ack_update);
-
+    ret = IOT_Shadow_Push_Async(pshadow, data, data_len, timeout_s, iotx_update_ack_cb, &ack_update);
+    if(SUCCESS_RETURN != ret) {
+        return ret;
+    }
     /* wait ACK */
     while (IOTX_SHADOW_ACK_NONE == ack_update) {
         IOT_Shadow_Yield(pshadow, 200);
+        if(cnt ++ == 100) {
+            return ERROR_SHADOW_UPDATE_TIMEOUT;
+        }
     }
 
     if ((IOTX_SHADOW_ACK_SUCCESS == ack_update)

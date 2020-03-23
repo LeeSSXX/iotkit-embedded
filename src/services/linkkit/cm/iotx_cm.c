@@ -227,7 +227,7 @@ int iotx_cm_close(int fd)
     HAL_MutexLock(fd_lock);
     close_func = _cm_fd[fd]->close_func;
     HAL_MutexUnlock(fd_lock);
-    if (close_func() != 0) {
+    if (close_func == NULL || close_func() != 0) {
         return -1;
     }
     if (_recycle_fd(fd) != 0) {
