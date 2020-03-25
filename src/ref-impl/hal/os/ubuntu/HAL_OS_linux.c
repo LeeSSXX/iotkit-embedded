@@ -30,7 +30,6 @@
 
 #include "iot_import.h"
 #include "iotx_hal_internal.h"
-#include "kv.h"
 
 #define __DEMO__
 
@@ -452,8 +451,12 @@ int HAL_ThreadCreate(
     }
 
     ret = pthread_create((pthread_t *)thread_handle, NULL, work_routine, arg);
-
-    return ret;
+    if (ret != 0) {
+        printf("pthread_create failed,ret = %d", ret);
+        return -1;
+    }
+    pthread_detach((pthread_t)*thread_handle);
+    return 0;
 }
 
 void HAL_ThreadDetach(_IN_ void *thread_handle)
@@ -464,7 +467,7 @@ void HAL_ThreadDetach(_IN_ void *thread_handle)
 void HAL_ThreadDelete(_IN_ void *thread_handle)
 {
     if (NULL == thread_handle) {
-        pthread_exit(0);
+
     } else {
         /*main thread delete child thread*/
         pthread_cancel((pthread_t)thread_handle);
@@ -867,44 +870,6 @@ uint32_t HAL_Wifi_Get_IP(char ip_str[NETWORK_ADDR_LEN], const char *ifname)
     return ((struct sockaddr_in *)&ifreq.ifr_addr)->sin_addr.s_addr;
 }
 
-static kv_file_t *kvfile = NULL;
-
-int HAL_Kv_Set(const char *key, const void *val, int len, int sync)
-{
-    if (!kvfile) {
-        kvfile = kv_open("/data-rw/kvfile.db");
-        if (!kvfile) {
-            return -1;
-        }
-    }
-
-    return kv_set_blob(kvfile, (char *)key, (char *)val, len);
-}
-
-int HAL_Kv_Get(const char *key, void *buffer, int *buffer_len)
-{
-    if (!kvfile) {
-        kvfile = kv_open("/data-rw/kvfile.db");
-        if (!kvfile) {
-            return -1;
-        }
-    }
-
-    return kv_get_blob(kvfile, (char *)key, buffer, buffer_len);
-}
-
-int HAL_Kv_Del(const char *key)
-{
-    if (!kvfile) {
-        kvfile = kv_open("/data-rw/kvfile.db");
-        if (!kvfile) {
-            return -1;
-        }
-    }
-
-    return kv_del(kvfile, (char *)key);
-}
-
 static long long os_time_get(void)
 {
     struct timeval tv;
@@ -972,7 +937,7 @@ int HAL_Timer_Start(void *timer, int ms)
 
     /* it_value=0: stop timer */
     ts.it_value.tv_sec = ms / 1000;
-    ts.it_value.tv_nsec = (ms % 1000) * 1000;
+    ts.it_value.tv_nsec = (ms % 1000) * 1000000;
 
     return timer_settime(*(timer_t *)timer, 0, &ts, NULL);
 }

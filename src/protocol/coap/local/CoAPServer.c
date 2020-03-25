@@ -79,6 +79,7 @@ void *coap_yield_mutex = NULL;
 
 static void *CoAPServer_yield(void *param)
 {
+    void *cur_thread = g_coap_thread;
     CoAPContext *context = (CoAPContext *)param;
     COAP_DEBUG("Enter to CoAP daemon task");
 
@@ -89,9 +90,9 @@ static void *CoAPServer_yield(void *param)
 #ifdef COAP_SERV_MULTITHREAD
     HAL_SemaphorePost(g_semphore);
     COAP_INFO("Exit the CoAP daemon task, Post semphore");
-
-    HAL_ThreadDelete(NULL);
     g_coap_thread = NULL;
+    HAL_ThreadDelete(cur_thread);
+
 #endif
     return NULL;
 }
@@ -104,6 +105,7 @@ void CoAPServer_add_timer(void (*on_timer)(void *))
 }
 
 
+static void *coap_init_mutex = NULL;
 
 CoAPContext *CoAPServer_init()
 {
@@ -111,6 +113,15 @@ CoAPContext *CoAPServer_init()
 #ifdef COAP_SERV_MULTITHREAD
     int stack_used;
 #endif
+    if (NULL == coap_init_mutex) {
+        coap_init_mutex = HAL_MutexCreate();
+
+        if (NULL == coap_init_mutex) {
+            return NULL;
+        }
+    }
+
+    HAL_MutexLock(coap_init_mutex);
 
     if (NULL == g_context) {
         param.appdata = NULL;
@@ -126,6 +137,7 @@ CoAPContext *CoAPServer_init()
         g_semphore  = HAL_SemaphoreCreate();
         if (NULL == g_semphore) {
             COAP_ERR("Semaphore Create failed");
+            HAL_MutexUnlock(coap_init_mutex);
             return NULL;
         }
 
@@ -134,6 +146,7 @@ CoAPContext *CoAPServer_init()
             COAP_ERR("coap_yield_mutex Create failed");
             HAL_SemaphoreDestroy(g_semphore);
             g_semphore = NULL;
+            HAL_MutexUnlock(coap_init_mutex);
             return NULL;
         }
 #endif
@@ -147,6 +160,7 @@ CoAPContext *CoAPServer_init()
             coap_yield_mutex = NULL;
 #endif
             COAP_ERR("CoAP Context Create failed");
+            HAL_MutexUnlock(coap_init_mutex);
             return NULL;
         }
 #ifdef COAP_SERV_MULTITHREAD
@@ -160,7 +174,7 @@ CoAPContext *CoAPServer_init()
     } else {
         COAP_INFO("The CoAP Server already init");
     }
-
+    HAL_MutexUnlock(coap_init_mutex);
     return (CoAPContext *)g_context;
 }
 
@@ -170,6 +184,13 @@ void CoAPServer_deinit(CoAPContext *context)
         COAP_INFO("Invalid CoAP Server context");
         return;
     }
+
+    if (NULL == coap_init_mutex) {
+        COAP_ERR("CoAP init mutex is NULL");
+        return;
+    }
+
+    HAL_MutexLock(coap_init_mutex);
 
     COAP_INFO("CoAP Server deinit");
     g_coap_running = 0;
@@ -185,13 +206,18 @@ void CoAPServer_deinit(CoAPContext *context)
         HAL_MutexDestroy(coap_yield_mutex);
         coap_yield_mutex = NULL;
     }
-    HAL_ThreadDelete(g_coap_thread);
+
 #endif
     if (NULL != context) {
         CoAPContext_free(context);
         g_context = NULL;
     }
-    HAL_SleepMs(1000);
+
+    HAL_MutexUnlock(coap_init_mutex);
+
+    HAL_MutexDestroy(coap_init_mutex);
+
+    coap_init_mutex = NULL;
 }
 
 int CoAPServer_register(CoAPContext *context, const char *uri, CoAPRecvMsgHandler callback)

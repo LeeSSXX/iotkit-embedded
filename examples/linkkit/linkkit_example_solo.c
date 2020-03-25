@@ -5,6 +5,13 @@
 #include "deprecated/solo.c"
 #else
 #include "stdio.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#ifdef __UBUNTU_SDK_DEMO__
+    #include <unistd.h>
+#endif
+
 #include "iot_export_linkkit.h"
 #include "cJSON.h"
 #include "app_entry.h"
@@ -34,6 +41,33 @@
         HAL_Printf(__VA_ARGS__);                                 \
         HAL_Printf("\033[0m\r\n");                                   \
     } while (0)
+
+
+void run_ubuntu_wifi_provision_example()
+{
+#ifdef __UBUNTU_SDK_DEMO__
+#if defined(WIFI_PROVISION_ENABLED)
+    char *wifi_name = "linkkit";
+    char buffer[128] = {0};
+    int ret;
+    extern int awss_config_press();
+    extern int awss_start();
+    memset(buffer, 0, 128);
+    snprintf(buffer, 128, "nmcli connection down %s", wifi_name);
+    ret = system(buffer);
+
+    memset(buffer, 0, 128);
+    snprintf(buffer, 128, "nmcli connection delete %s", wifi_name);
+    ret = system(buffer);
+    sleep(15);
+
+    awss_config_press();
+    awss_start();
+#endif
+#endif
+}
+
+
 
 typedef struct {
     int master_devid;
@@ -163,6 +197,14 @@ static int user_property_set_event_handler(const int devid, const char *request,
                              (unsigned char *)request, request_len);
     EXAMPLE_TRACE("Post Property Message ID: %d", res);
 
+    return 0;
+}
+
+
+static int user_event_notify_event_handler(const int devid, const char *request, const int request_len)
+{
+    int res = 0;
+    EXAMPLE_TRACE("Event Notify Received, Devid: %d, Request: %s", devid, request);
     return 0;
 }
 
@@ -514,6 +556,17 @@ static int user_master_dev_available(void)
     return 0;
 }
 
+static int user_dev_bind_event(const int state_code, const char *state_message)
+{
+    EXAMPLE_TRACE("state_code: -0x%04x, str_msg= %s", -state_code, state_message == NULL ? "NULL" : state_message);
+    return 0;
+}
+static int user_cloud_error_handler(const int code, const char *data, const char *detail)
+{
+    EXAMPLE_TRACE("code =%d ,data=%s, detail=%s", code, data, detail);
+    return 0;
+}
+
 void set_iotx_info()
 {
     HAL_SetProductKey(PRODUCT_KEY);
@@ -549,6 +602,26 @@ int linkkit_main(void *paras)
     set_iotx_info();
 #endif
 
+    /*
+     * if the following conditions are met:
+     *    1) wifi provision is enabled,
+     *    2) current OS is Ubuntu,
+     *    3) a wireless card(Linksys思科wusb600n双频无线网卡) is inserted
+     *    4) g_ifname in HAL_AWSS_linux.c has been set to be the wireless card's name according to ifconfig
+     *       for example, the output of command "ifconfig" is like:
+     *         wlx00259ce04ceb Link encap:Ethernet  HWaddr 00:25:9c:e0:4c:eb
+     *         UP BROADCAST PROMISC MULTICAST  MTU:1500  Metric:1
+     *         RX packets:8709 errors:0 dropped:27 overruns:0 frame:0
+     *         TX packets:2457 errors:0 dropped:0 overruns:0 carrier:0
+     *         collisions:0 txqueuelen:1000
+     *         RX bytes:2940097 (2.9 MB)  TX bytes:382827 (382.8 KB)
+     *       then set g_ifname = "wlx00259ce04ceb"
+     *    5) the linkkit-example-solo is running with sudo permission
+     *  Then you can run wifi-provision example in Ubuntu, just to uncomment the following line
+     */
+
+    /* run_ubuntu_wifi_provision_example(); */
+
     memset(user_example_ctx, 0, sizeof(user_example_ctx_t));
 
     IOT_SetLogLevel(IOT_LOG_DEBUG);
@@ -559,6 +632,7 @@ int linkkit_main(void *paras)
     IOT_RegisterCallback(ITE_RAWDATA_ARRIVED, user_down_raw_data_arrived_event_handler);
     IOT_RegisterCallback(ITE_SERVICE_REQUST, user_service_request_event_handler);
     IOT_RegisterCallback(ITE_PROPERTY_SET, user_property_set_event_handler);
+    IOT_RegisterCallback(ITE_EVENT_NOTIFY, user_event_notify_event_handler);
     IOT_RegisterCallback(ITE_PROPERTY_GET, user_property_get_event_handler);
     IOT_RegisterCallback(ITE_REPORT_REPLY, user_report_reply_event_handler);
     IOT_RegisterCallback(ITE_TRIGGER_EVENT_REPLY, user_trigger_event_reply_event_handler);
@@ -566,6 +640,8 @@ int linkkit_main(void *paras)
     IOT_RegisterCallback(ITE_INITIALIZE_COMPLETED, user_initialized);
     IOT_RegisterCallback(ITE_FOTA, user_fota_event_handler);
     IOT_RegisterCallback(ITE_COTA, user_cota_event_handler);
+    IOT_RegisterCallback(ITE_STATE_DEV_BIND,  user_dev_bind_event);
+    IOT_RegisterCallback(ITE_CLOUD_ERROR, user_cloud_error_handler);
 
     memset(&master_meta_info, 0, sizeof(iotx_linkkit_dev_meta_info_t));
     memcpy(master_meta_info.product_key, PRODUCT_KEY, strlen(PRODUCT_KEY));
@@ -598,11 +674,13 @@ int linkkit_main(void *paras)
     }
 
     /* Start Connect Aliyun Server */
-    res = IOT_Linkkit_Connect(user_example_ctx->master_devid);
-    if (res < 0) {
-        EXAMPLE_TRACE("IOT_Linkkit_Connect Failed\n");
-        return -1;
-    }
+    do {
+        res = IOT_Linkkit_Connect(user_example_ctx->master_devid);
+        if (res < 0) {
+            EXAMPLE_TRACE("IOT_Linkkit_Connect failed, retry after 5s...\n");
+            HAL_SleepMs(5000);
+        }
+    } while (res < 0);
 
     time_begin_sec = user_update_sec();
     while (1) {

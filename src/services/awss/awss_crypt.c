@@ -7,7 +7,7 @@
 #include <string.h>
 #include "os.h"
 #include "awss_utils.h"
-#include "sha256.h"
+#include "utils_sha256.h"
 #include "passwd.h"
 #include "awss_log.h"
 #include "awss_wifimgr.h"
@@ -16,6 +16,10 @@
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */
 extern "C"
 {
+#endif
+
+#ifndef SHA256_DIGEST_SIZE
+#define SHA256_DIGEST_SIZE      (32)
 #endif
 
 static const char *cal_passwd(void *key, void *random, void *passwd)
@@ -37,8 +41,7 @@ static const char *cal_passwd(void *key, void *random, void *passwd)
     key_len += RANDOM_MAX_LEN;
 
     // produce digest using combination of key and random
-    SHA256_hash(passwd_src, key_len, digest);
-
+    utils_sha256(passwd_src, key_len, digest);
     // use the first 128bits as AES-Key
     memcpy(passwd, digest, AES128_KEY_LEN);
 
@@ -123,6 +126,11 @@ int aes_decrypt_string(char *cipher, char *plain, int len, int sec_lvl, char cbc
     os_free(decoded);
 
     return res;
+}
+
+int awss_get_encrypt_type()
+{
+    return 3;
 }
 
 #if defined(__cplusplus)  /* If this is a C++ compiler, use C linkage */

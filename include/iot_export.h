@@ -113,6 +113,8 @@ typedef enum {
     IOTX_IOCTL_SET_REGION,              /* value(int*): iotx_cloud_region_types_t */
     IOTX_IOCTL_GET_REGION,              /* value(int*) */
     IOTX_IOCTL_SET_MQTT_DOMAIN,         /* value(const char*): point to mqtt domain string */
+    IOTX_IOCTL_SET_MQTT_PORT,           /* value(int*): point to mqtt port number*/
+    IOTX_IOCTL_SET_ENV,                 /* value(int*): 0 - env is ONLINE; 1 - env is PRE; 2 - env is DAILY*/
     IOTX_IOCTL_SET_HTTP_DOMAIN,         /* value(const char*): point to http domain string */
     IOTX_IOCTL_SET_DYNAMIC_REGISTER,    /* value(int*): 0 - Disable Dynamic Register, 1 - Enable Dynamic Register */
     IOTX_IOCTL_GET_DYNAMIC_REGISTER,    /* value(int*) */
@@ -120,7 +122,8 @@ typedef enum {
     IOTX_IOCTL_RECV_EVENT_REPLY,        /* value(int*): 0 - Disable event post reply by cloud; 1 - Enable event post reply by cloud */
     IOTX_IOCTL_SEND_PROP_SET_REPLY,     /* value(int*): 0 - Disable send post set reply by devid; 1 - Enable property set reply by devid */
     IOTX_IOCTL_SET_SUBDEV_SIGN,         /* value(const char*): only for slave device, set signature of subdevice */
-    IOTX_IOCTL_GET_SUBDEV_LOGIN         /* value(int*): 0 - SubDev is logout; 1 - SubDev is login */
+    IOTX_IOCTL_GET_SUBDEV_LOGIN,        /* value(int*): 0 - SubDev is logout; 1 - SubDev is login */
+    IOTX_IOCTL_QUERY_DEVID,             /* value(iotx_linkkit_dev_meta_info_t*): device meta info, only productKey and deviceName is required, ret value is subdev_id or -1 */
 } iotx_ioctl_option_t;
 
 typedef enum {
@@ -140,7 +143,20 @@ typedef enum {
     ITE_INITIALIZE_COMPLETED,
     ITE_FOTA,
     ITE_COTA,
-    ITE_MQTT_CONNECT_SUCC
+    ITE_MQTT_CONNECT_SUCC,
+    ITE_CLOUD_ERROR,
+    ITE_STATE_EVERYTHING,
+    ITE_STATE_USER_INPUT,
+    ITE_STATE_SYS_DEPEND,
+    ITE_STATE_MQTT_COMM,
+    ITE_STATE_WIFI_PROV,
+    ITE_STATE_COAP_LOCAL,
+    ITE_STATE_HTTP_COMM,
+    ITE_STATE_OTA,
+    ITE_STATE_DEV_BIND,
+    ITE_STATE_SUB_DEVICE,
+    ITE_EVENT_NOTIFY,
+    ITE_STATE_DEV_MODEL     /* Must be last state relative event */
 } iotx_ioctl_event_t;
 
 #define IOT_RegisterCallback(evt, cb)           iotx_register_for_##evt(cb);
@@ -157,6 +173,7 @@ DECLARE_EVENT_CALLBACK(ITE_RAWDATA_ARRIVED,      int (*cb)(const int, const unsi
 DECLARE_EVENT_CALLBACK(ITE_SERVICE_REQUST,       int (*cb)(const int, const char *, const int, const char *, const int,
                        char **, int *))
 DECLARE_EVENT_CALLBACK(ITE_PROPERTY_SET,         int (*cb)(const int, const char *, const int))
+DECLARE_EVENT_CALLBACK(ITE_EVENT_NOTIFY,         int (*cb)(const int, const char *, const int))
 DECLARE_EVENT_CALLBACK(ITE_PROPERTY_GET,         int (*cb)(const int, const char *, const int, char **, int *))
 DECLARE_EVENT_CALLBACK(ITE_REPORT_REPLY,         int (*cb)(const int, const int, const int, const char *, const int))
 DECLARE_EVENT_CALLBACK(ITE_TRIGGER_EVENT_REPLY,  int (*cb)(const int, const int, const int, const char *, const int,
@@ -169,6 +186,23 @@ DECLARE_EVENT_CALLBACK(ITE_FOTA,                 int (*cb)(const int, const char
 DECLARE_EVENT_CALLBACK(ITE_COTA,                 int (*cb)(const int, const char *, int, const char *, const char *,
                        const char *, const char *))
 DECLARE_EVENT_CALLBACK(ITE_MQTT_CONNECT_SUCC,    int (*cb)(void))
+DECLARE_EVENT_CALLBACK(ITE_CLOUD_ERROR,          int (*cb)(const int, const char *, const char *))
+
+typedef int (*state_handler_t)(const int state_code, const char *state_message);
+DECLARE_EVENT_CALLBACK(ITE_STATE_EVERYTHING, state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_USER_INPUT, state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_SYS_DEPEND, state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_MQTT_COMM,  state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_WIFI_PROV,  state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_COAP_LOCAL, state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_HTTP_COMM,  state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_OTA,        state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_DEV_BIND,   state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_SUB_DEVICE, state_handler_t cb);
+DECLARE_EVENT_CALLBACK(ITE_STATE_DEV_MODEL,  state_handler_t cb);
+
+int iotx_state_event(const int event, const int state_code, const char *state_message);
+
 
 /** @defgroup group_api api
  *  @{
@@ -247,6 +281,7 @@ DLL_IOT_API int IOT_Ioctl(int option, void *data);
 #include "exports/iot_export_event.h"
 #include "exports/iot_export_http2.h"
 #include "exports/iot_export_http2_stream.h"
+#include "exports/iot_export_state.h"
 
 #if defined(__cplusplus)
 }

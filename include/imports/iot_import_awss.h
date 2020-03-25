@@ -13,6 +13,19 @@ extern "C" {
 #define _IN_OPT_
 #endif
 
+#ifndef DLL_HAL_API
+#define DLL_HAL_API
+#endif
+
+#ifndef _IN_
+#define _IN_
+#endif
+
+#ifndef _OU_
+#define _OU_
+#endif
+
+
 #define STR_SHORT_LEN                   (32)
 #ifndef ETH_ALEN
 #define ETH_ALEN                        (6)
@@ -330,6 +343,15 @@ DLL_HAL_API int HAL_Awss_Get_Encrypt_Type(void);
  * @see None.
  */
 DLL_HAL_API int HAL_Awss_Get_Conn_Encrypt_Type(void);
+
+/* @brief   打开当前设备热点，并把设备由SoftAP模式切换到AP模式
+ */
+int HAL_Awss_Open_Ap(const char *ssid, const char *passwd, int beacon_interval, int hide);
+
+/* @brief   关闭当前设备热点，并把设备由SoftAP模式切换到Station模式
+*/
+int HAL_Awss_Close_Ap();
+
 
 #ifdef __cplusplus
 }
