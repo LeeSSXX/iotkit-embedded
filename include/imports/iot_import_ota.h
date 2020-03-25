@@ -19,6 +19,7 @@
  * @see None.
  * @note None.
  */
+DLL_HAL_API void HAL_Config_Persistence_Start(void);
 DLL_HAL_API void HAL_Firmware_Persistence_Start(void);
 
 
@@ -31,6 +32,7 @@ DLL_HAL_API void HAL_Firmware_Persistence_Start(void);
  * @see None.
  * @note None.
  */
+DLL_HAL_API int HAL_Config_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length);
 DLL_HAL_API int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length);
 
 
@@ -43,7 +45,19 @@ DLL_HAL_API int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t 
  * @see None.
  * @note None.
  */
-DLL_HAL_API int HAL_Firmware_Persistence_Stop(void);
+DLL_HAL_API int HAL_Config_Persistence_Stop();
+DLL_HAL_API int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *state);
+
+/**
+ * @brief indicate firmware upgrade data error
+ *
+ * @param None.
+ * @return 0: Success; -1: Failure.
+ * @see None.
+ * @note None.
+ */
+DLL_HAL_API int HAL_Config_Persistence_Error(void);
+DLL_HAL_API int HAL_Firmware_Persistence_Error(void);
 
 #endif  /* __IOT_IMPORT_UOTA_H__ */
 

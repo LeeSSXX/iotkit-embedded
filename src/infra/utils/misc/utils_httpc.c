@@ -919,7 +919,7 @@ int iotx_post(httpclient_t *client,
     char host[HTTPCLIENT_MAX_HOST_LEN] = { 0 };
 
     httpclient_parse_host(url, host, sizeof(host));
-    utils_info("host: '%s', port: %d", host, port);
+    utils_debug("host: '%s', port: %d", host, port);
 
     if (0 == client->net.handle) {
         /* Establish connection if no. */

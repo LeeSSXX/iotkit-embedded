@@ -69,6 +69,10 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
     dm_fota_ctx_t *ctx = _dm_fota_get_ctx();
     void *ota_handle = NULL;
     uint32_t ota_type = IOT_OTAT_NONE;
+    char version[FIRMWARE_VERSION_MAXLEN] = {0};
+    char ota_md5[33] = {0};
+    char state[128] = {0};
+    char new_version[FIRMWARE_VERSION_MAXLEN] = {0};
 
     if (output == NULL || output_len <= 0) {
         return DM_INVALID_PARAMETER;
@@ -89,6 +93,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         return FAIL_RETURN;
     }
 
+    IOT_OTA_Ioctl(ota_handle, IOT_OTAG_VERSION, new_version, FIRMWARE_VERSION_MAXLEN);
     /* reset the size_fetched in ota_handle to be 0 */
     IOT_OTA_Ioctl(ota_handle, IOT_OTAG_RESET_FETCHED_SIZE, ota_handle, 4);
     /* Prepare Write Data To Storage */
@@ -97,7 +102,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         file_download = IOT_OTA_FetchYield(ota_handle, output, output_len, 1);
         if (file_download < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_FETCH_FAILED, NULL);
-            HAL_Firmware_Persistence_Stop();
+            HAL_Firmware_Persistence_Error();
             ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
@@ -107,7 +112,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         if (res < 0) {
             IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, NULL);
             dm_log_err("Fota write firmware failed");
-            HAL_Firmware_Persistence_Stop();
+            HAL_Firmware_Persistence_Error();
             ctx->is_report_new_config = 0;
             return FAIL_RETURN;
         }
@@ -136,7 +141,7 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
             uint32_t file_isvalid = 0;
             IOT_OTA_Ioctl(ota_handle, IOT_OTAG_CHECK_FIRMWARE, &file_isvalid, 4);
             if (file_isvalid == 0) {
-                HAL_Firmware_Persistence_Stop();
+                HAL_Firmware_Persistence_Error();
                 IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_CHECK_FALIED, NULL);
                 ctx->is_report_new_config = 0;
                 return FAIL_RETURN;
@@ -146,9 +151,22 @@ int dm_fota_perform_sync(_OU_ char *output, _IN_ int output_len)
         }
     }
 
-    HAL_Firmware_Persistence_Stop();
+    dm_log_info("Firmware Download Done!");
+    IOT_OTA_Ioctl(ota_handle, IOT_OTAG_MD5SUM, ota_md5, 33);
+    if (HAL_Firmware_Persistence_Stop(new_version, ota_md5, state) != 0) {
+        IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, state);
+        ctx->is_report_new_config = 0;
+        return FAIL_RETURN;
+    } else {
+        if (HAL_GetFirmwareVersion(version) <= 0) {
+            IOT_OTA_ReportProgress(ota_handle, IOT_OTAP_BURN_FAILED, "get version info failed\n");
+            ctx->is_report_new_config = 0;
+            return FAIL_RETURN;
+        }
+        IOT_OTA_ReportVersion(ota_handle, version);
+    }
     ctx->is_report_new_config = 0;
-
+    dm_log_info("Firmware Update Done!");
     return SUCCESS_RETURN;
 }
 

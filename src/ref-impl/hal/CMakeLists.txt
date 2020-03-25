@@ -41,7 +41,7 @@ FILE (GLOB src_ref-impl_hal_SRCS
     ${PROJECT_SOURCE_DIR}/src/ref-impl/hal/ssl/mbedtls/*.c
 )
 
-ADD_LIBRARY (iot_hal SHARED
+ADD_LIBRARY (iot_hal STATIC
     ${src_ref-impl_hal_SRCS}
     ${EXTRA_C_SOURCES}
 )
