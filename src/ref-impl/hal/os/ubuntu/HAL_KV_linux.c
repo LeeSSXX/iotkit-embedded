@@ -16,7 +16,7 @@
 #define ITEM_MAX_VAL_LEN     512 /* The max value length for key-value item */
 #define ITEM_MAX_LEN         sizeof(kv_item_t)
 
-#define KV_FILE_NAME         "linkkit_kv.bin"
+#define KV_FILE_NAME         "/data-rw/kvfile.db"
 
 #define kv_err(...)               do{printf(__VA_ARGS__);printf("\r\n");}while(0)
 
