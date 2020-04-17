@@ -1,335 +1,121 @@
-
-#include <stdlib.h>
-#include <string.h>
+/*
+ * Copyright (C) 2015-2018 Alibaba Group Holding Limited
+ */
 #include <stdio.h>
-#include "stdint.h"
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <libgen.h>
 #include <sys/stat.h>
-#include <unistd.h>
+#include "iotx_hal_internal.h"
+#include "cJSON.h"
+#include "base64.h"
 
-
-#define TABLE_COL_SIZE    (384)
-#define TABLE_ROW_SIZE    (2)
-
-#define ITEM_MAX_KEY_LEN     128 /* The max key length for key-value item */
-#define ITEM_MAX_VAL_LEN     512 /* The max value length for key-value item */
-#define ITEM_MAX_LEN         sizeof(kv_item_t)
-
-#define KV_FILE_NAME         "/data-rw/kvfile.db"
-
-#define kv_err(...)               do{printf(__VA_ARGS__);printf("\r\n");}while(0)
-
-typedef struct kv {
-    char key[ITEM_MAX_KEY_LEN];
-    uint8_t value[ITEM_MAX_VAL_LEN];
-    int value_len;
-} kv_item_t;
-
-typedef struct kv_file_s {
-    const char *filename;
+struct kv_file_s {
+    char filename[128];
+    cJSON *json_root;
     pthread_mutex_t lock;
-} kv_file_t;
+};
+typedef struct kv_file_s kv_file_t;
 
-static int kv_get(const char *key, void *value, int *value_len);
-static int kv_set(const char *key, void *value, int value_len);
-static int kv_del(const char *key);
-static unsigned int hash_gen(const char *key);
-static int hash_table_put(kv_file_t *file, const  char *key, void *value, int value_len);
-static int hash_table_get(kv_file_t *file, const char *key, void *value, int *len);
-static int hash_table_rm(kv_file_t *file,  const  char *key);
-static kv_file_t *kv_open(const char *filename);
-static int read_kv_item(const char *filename, void *buf, int location);
-static int write_kv_item(const char *filename, void *data, int location);
+/*
+ * update KV file atomically:
+ *   step 1. save data in temporary file
+ *   step 2. rename temporary file to the orignal one
+ */
+static int kv_sync(kv_file_t *file) {
+    char *json = cJSON_Print(file->json_root);
+    if (!json)
+        return -1;
 
-static void free_kv(struct kv *kv)
-{
-    if (kv) {
-        kv->value_len = 0;
-        free(kv);
-    }
-}
+    /* create temporary file in the same directory as orignal KV file */
+    char fullpath[128] = {0};
+    strncpy(fullpath, file->filename, sizeof(fullpath) - 1);
 
-static unsigned int hash_gen(const char *key)
-{
-    unsigned int hash = 0;
-    while (*key) {
-        hash = (hash << 5) + hash + *key++;
-    }
-    return hash % TABLE_COL_SIZE;
-}
+    char *dname = dirname(fullpath);
+    char *template = "/tmpfile.XXXXXX";
 
-/* insert or update a value indexed by key */
-static int hash_table_put(kv_file_t *file, const  char *key, void *value, int value_len)
-{
-    int i;
-    int read_size;
-    kv_item_t *kv;
-    int j = 0;
-    kv_item_t *p;
-    if (!file || !file->filename ||  !key || !value  || value_len <= 0) {
-        kv_err("paras err");
+    int pathlen = strlen(dname) + strlen(template) + 1;
+    if (pathlen > sizeof(fullpath)) {
+        free(json);
         return -1;
     }
 
-    value_len = value_len > ITEM_MAX_VAL_LEN ? ITEM_MAX_VAL_LEN : value_len;
-    i = hash_gen(key);
-    kv_err("hash i= %d", i);
-    read_size = ITEM_MAX_LEN * TABLE_ROW_SIZE + 1;
-    kv = malloc(read_size);
-    if (kv == NULL) {
-        kv_err("malloc kv err");
+    if (dname == fullpath) {    /* see dirname man-page for more detail */
+        strcat(fullpath, template);
+    } else {
+        strcpy(fullpath, dname);
+        strcat(fullpath, template);
+    }
+
+    int tmpfd = mkstemp(fullpath);
+    if (tmpfd < 0) {
+        hal_err("kv_sync open");
+        free(json);
         return -1;
     }
 
-    memset(kv, 0, read_size);
-    if (read_kv_item(file->filename, kv, i) != 0) {
-        kv_err("read kv err");
-        free_kv(kv);
+    /* write json data into temporary file */
+    int len = strlen(json) + 1;
+    if (write(tmpfd, json, len) != len) {
+        hal_err("kv_sync write");
+        close(tmpfd);
+        free(json);
         return -1;
     }
-    p = &kv[j];
 
-    while (p && p->value_len) { /* if key is already stored, update its value */
+    fsync(tmpfd);
+    close(tmpfd);
+    free(json);
 
-        if (memcmp(p->key, key, strlen(key)) == 0) {
-            memset(p->value, 0, ITEM_MAX_VAL_LEN);
-            memcpy(p->value, value, value_len);
-            p->value_len = value_len;
-            break;
-        }
-
-        if (++j == TABLE_ROW_SIZE) {
-            kv_err("hash row full");
-            free(kv);
-            return -1;
-        }
-        p = &kv[j];
-    }
-
-    p = &kv[j];
-    if (p && !p->value_len) {/* if key has not been stored, then add it */
-        //p->next = NULL;
-        strncpy(p->key, key, ITEM_MAX_KEY_LEN - 1);
-        memcpy(p->value, value, value_len);
-        p->value_len = value_len;
-    }
-
-    if (write_kv_item(file->filename, kv, i) < 0) {
-        kv_err("write_kv_item err");
-        free(kv);
+    /* save KV file atomically */
+    if (rename(fullpath, file->filename) < 0) {
+        hal_err("rename");
         return -1;
     }
-    free(kv);
+
     return 0;
 }
 
-/* get a value indexed by key */
-static int hash_table_get(kv_file_t *file, const char *key, void *value, int *len)
-{
-    int i;
-    int read_size;
-    kv_item_t *kv;
-    int j = 0;
-    struct kv *p;
-    if (!file || !file->filename || !key || !value || !len  || *len <= 0) {
-        kv_err("paras err");
-        return -1;
-    }
-
-    i = hash_gen(key);
-
-    read_size = sizeof(kv_item_t) * TABLE_ROW_SIZE + 1;
-    kv = malloc(read_size);
-    if (kv == NULL) {
-        kv_err("malloc kv err");
-        return -1;
-    }
-
-    memset(kv, 0, read_size);
-    if (read_kv_item(file->filename, kv, i) != 0) {
-        kv_err("read kv err");
-        free_kv(kv);
-        return -1;
-    }
-
-    // struct kv *p = ht->table[i];
-    p = &kv[j];
-
-    while (p && p->value_len) {
-        if (memcmp(key, p->key, strlen(key)) == 0) {
-            *len = p->value_len < *len ? p->value_len : *len;
-            memcpy(value, p->value, *len);
-            free_kv(kv);
-            return 0;
-        }
-        if (++j == TABLE_ROW_SIZE) {
-            break;
-        }
-        p = &kv[j];
-    }
-    free_kv(kv);
-    kv_err("not found");
-    return -1;
-}
-
-/* remove a value indexed by key */
-static int hash_table_rm(kv_file_t *file,  const  char *key)
-{
-    int i;
-    int read_size;
-    kv_item_t *kv;
-    int j = 0;
-    struct kv *p;
-    if (!file || !file->filename ||  !key) {
-        return -1;
-    }
-    i = hash_gen(key) % TABLE_COL_SIZE;
-    read_size = sizeof(kv_item_t) * TABLE_ROW_SIZE + 1;
-    kv = malloc(read_size);
-    if (kv == NULL) {
-        return -1;
-    }
-
-    memset(kv, 0, read_size);
-    if (read_kv_item(file->filename, kv, i) != 0) {
-        free_kv(kv);
-        return -1;
-    }
-
-    p = &kv[j];
-
-    while (p && p->value_len) {
-        if (memcmp(key, p->key, strlen(key)) == 0) {
-            memset(p, 0, ITEM_MAX_LEN);
-        }
-        if (++j == TABLE_ROW_SIZE) {
-            break;
-        }
-        p = &kv[j];
-    }
-
-    if (write_kv_item(file->filename, kv, i) < 0) {
-        free_kv(kv);
-        return -1;
-    }
-    free_kv(kv);
-    return 0;
-}
-
-static int read_kv_item(const char *filename, void *buf, int location)
-{
-    struct stat st;
-    int ret = 0;
-    int offset;
-    if (filename == NULL || buf == NULL) {
-        kv_err("paras err");
-        return -1;
-    }
-
+static char *read_file(char *filename) {
     int fd = open(filename, O_RDONLY);
+    if (fd < 0)
+        return NULL;
 
-    if (fd < 0) {
-        kv_err("open err");
-        return -1;
-    }
-
-    if (fstat(fd, &st) < 0) {
-        kv_err("fstat err");
-        close(fd);
-        return -1;
-    }
-
-    if (st.st_size < (location + 1) *ITEM_MAX_LEN * TABLE_ROW_SIZE) {
-        kv_err("read overstep");
-        close(fd);
-        return -1;
-    }
-
-    offset =  location * ITEM_MAX_LEN * TABLE_ROW_SIZE;
-    ret = lseek(fd, offset, SEEK_SET);
-    if (ret < 0) {
-        kv_err("lseek err");
-        close(fd);
-        return -1;
-    }
-
-    if (read(fd, buf, ITEM_MAX_LEN * TABLE_ROW_SIZE) != ITEM_MAX_LEN * TABLE_ROW_SIZE) {
-        kv_err("read err");
-        close(fd);
-        return -1;
-    }
-
-    close(fd);
-    return 0;
-}
-
-static int write_kv_item(const char *filename, void *data, int location)
-{
     struct stat st;
-    int offset;
-    int ret;
-    int fd = open(filename, O_WRONLY);
-    if (fd < 0) {
-        return -1;
-    }
-
     if (fstat(fd, &st) < 0) {
-        kv_err("fstat err");
         close(fd);
-        return -1;
+        return NULL;
     }
 
-    if (st.st_size < (location + 1) *ITEM_MAX_LEN * TABLE_ROW_SIZE) {
-        kv_err("overstep st.st_size = %d location =%d cur loc=%d",
-               (int)st.st_size,
-               (int)location,
-               (int)((location + 1) *ITEM_MAX_LEN * TABLE_ROW_SIZE));
+    char *buf = malloc(st.st_size);
+    if (!buf) {
         close(fd);
-        return -1;
+        return NULL;
     }
 
-    offset = (location) * ITEM_MAX_LEN * TABLE_ROW_SIZE;
-    ret = lseek(fd, offset, SEEK_SET);
-    if (ret < 0) {
-        kv_err("lseek err");
+    if (read(fd, buf, st.st_size) != st.st_size) {
+        free(buf);
         close(fd);
-        return -1;
+        return NULL;
     }
 
-    if (write(fd, data, ITEM_MAX_LEN * TABLE_ROW_SIZE) != ITEM_MAX_LEN * TABLE_ROW_SIZE) {
-        kv_err("kv write failed");
-        close(fd);
-        return -1;
-    }
-
-    fsync(fd);
     close(fd);
 
-    return 0;
+    return buf;
 }
 
-static int create_hash_file(kv_file_t *hash_kv)
-{
-    int i;
-    int fd;
-    char init_data[ITEM_MAX_LEN * TABLE_ROW_SIZE] = {0};
-    if (hash_kv == NULL) {
+static int create_json_file(char *filename) {
+    int fd = open(filename, O_CREAT | O_RDWR, 0644);
+    if (fd < 0)
         return -1;
-    }
-    fd = open(hash_kv->filename, O_CREAT | O_RDWR, 0644);
-    if (fd < 0) {
+
+    if (write(fd, "{}", 3) != 3) {  /* 3 = '{}' + null terminator */
+        close(fd);
         return -1;
-    }
-
-    for (i = 0; i < TABLE_COL_SIZE ; i++) {
-
-        if (write(fd, init_data, ITEM_MAX_LEN * TABLE_ROW_SIZE) != ITEM_MAX_LEN *
-            TABLE_ROW_SIZE) { /* 3 = '{}' + null terminator */
-            kv_err("write err");
-            close(fd);
-            return -1;
-        }
     }
 
     if (fsync(fd) < 0) {
@@ -341,133 +127,190 @@ static int create_hash_file(kv_file_t *hash_kv)
     return 0;
 }
 
-
-static kv_file_t *kv_open(const char *filename)
-{
+kv_file_t *kv_open(char *filename) {
     kv_file_t *file = malloc(sizeof(kv_file_t));
-    if (!file) {
+    if (!file)
         return NULL;
-    }
     memset(file, 0, sizeof(kv_file_t));
 
-    file->filename = filename;
-    pthread_mutex_init(&file->lock, NULL);
-    pthread_mutex_lock(&file->lock);
+    if (strlen(filename) > sizeof(file->filename) - 1) {
+        hal_err("filename %s is too long\n", filename);
+        goto fail;
+    }
+
+    strncpy(file->filename, filename, sizeof(file->filename) - 1);
 
     if (access(file->filename, F_OK) < 0) {
         /* create KV file when not exist */
-        if (create_hash_file(file) < 0) {
+        if (create_json_file(file->filename) < 0)
             goto fail;
-        }
     }
-    pthread_mutex_unlock(&file->lock);
+
+    char *json = read_file(filename);
+    if (!json)
+        goto fail;
+
+    file->json_root = cJSON_Parse(json);
+    if (!file->json_root) {
+        free(json);
+        goto fail;
+    }
+
+    pthread_mutex_init(&file->lock, NULL);
+
+    free(json);
+
     return file;
-fail:
-    pthread_mutex_unlock(&file->lock);
+
+    fail:
+    if (file->json_root)
+        cJSON_Delete(file->json_root);
     free(file);
 
     return NULL;
 }
 
-static int __kv_get(kv_file_t *file, const char *key, void *value, int *value_len)
-{
-    int ret;
-    if (!file || !key || !value || !value_len || *value_len <= 0) {
+int kv_close(kv_file_t *file) {
+    if (!file)
+        return -1;
+
+    pthread_mutex_destroy(&file->lock);
+
+    if (file->json_root)
+        cJSON_Delete(file->json_root);
+    free(file);
+
+    return 0;
+}
+
+int kv_get(kv_file_t *file, char *key, char *value, int value_len) {
+    if (!file || !file->json_root || !key || !value || value_len <= 0)
+        return -1;
+
+    pthread_mutex_lock(&file->lock);
+
+    cJSON *obj = cJSON_GetObjectItem(file->json_root, key);
+    if (!obj) {
+        pthread_mutex_unlock(&file->lock);
         return -1;
     }
 
+    strncpy(value, obj->valuestring, value_len - 1);
+    value[value_len - 1] = '\0';
+
+    pthread_mutex_unlock(&file->lock);
+
+    return 0;
+}
+
+int kv_set(kv_file_t *file, char *key, char *value) {
+    if (!file || !file->json_root || !key || !value)
+        return -1;
+
     pthread_mutex_lock(&file->lock);
-    ret = hash_table_get(file, key, value, value_len);
+    /* remove old value if exist */
+    cJSON_DeleteItemFromObject(file->json_root, key);
+    cJSON_AddItemToObject(file->json_root, key, cJSON_CreateString(value));
+
+    int ret = kv_sync(file);
     pthread_mutex_unlock(&file->lock);
 
     return ret;
 }
 
-static int __kv_set(kv_file_t *file, const char *key, void *value, int value_len)
-{
-    int ret;
-    if (!file || !key || !value || value_len <= 0) {
+int kv_del(kv_file_t *file, char *key) {
+    if (!file || !file->json_root || !key)
         return -1;
-    }
-
-    pthread_mutex_lock(&file->lock);
-    ret = hash_table_put(file, key, value, value_len);
-    pthread_mutex_unlock(&file->lock);
-
-    return ret;
-}
-
-int __kv_del(kv_file_t *file, const  char *key)
-{
-    int ret;
-    if (!file || !key) {
-        return -1;
-    }
 
     /* remove old value if exist */
     pthread_mutex_lock(&file->lock);
-    ret = hash_table_rm(file, key);
+    cJSON_DeleteItemFromObject(file->json_root, key);
+    int ret = kv_sync(file);
     pthread_mutex_unlock(&file->lock);
 
     return ret;
 }
 
-static kv_file_t *file = NULL;
-static int kv_get(const char *key, void *value, int *value_len)
-{
-    if (!file) {
-        file = kv_open(KV_FILE_NAME);
-        if (!file) {
-            kv_err("kv_open failed");
+int kv_set_blob(kv_file_t *file, char *key, void *value, int value_len) {
+    int encoded_len = ABase64_EncodeLen(value_len);
+
+    char *encoded = malloc(encoded_len);
+    if (!encoded)
+        return -1;
+
+    ABase64_Encode(value, value_len, encoded, encoded_len);
+
+    int ret = kv_set(file, key, encoded);
+
+    free(encoded);
+
+    return ret;
+}
+
+int kv_get_blob(kv_file_t *file, char *key, void *value, int *value_len) {
+    if (!file || !file->json_root || !key || !value || !value_len || *value_len <= 0)
+        return -1;
+
+    int ret = kv_get(file, key, value, *value_len);
+    if (ret < 0)
+        return ret;
+
+    int decode_len = ABase64_DecodeLen(value);
+
+    uint8_t *decoded = malloc(decode_len);
+    if (!decoded)
+        return -1;
+
+    if (ABase64_Decode(value, decoded, decode_len) < 0) {
+        free(decoded);
+        return -1;
+    }
+
+    if (decode_len > *value_len) {
+        free(decoded);
+        return -1;
+    }
+
+    memcpy(value, decoded, decode_len);
+    free(decoded);
+
+    *value_len = decode_len;
+
+    return 0;
+}
+
+
+static kv_file_t *kvfile = NULL;
+
+int HAL_Kv_Set(const char *key, const void *val, int len, int sync) {
+    if (!kvfile) {
+        kvfile = kv_open("/data-rw/kvfile.db");
+        if (!kvfile) {
             return -1;
         }
     }
 
-    return __kv_get(file, key, value, value_len);
+    return kv_set_blob(kvfile, (char *) key, (char *) val, len);
 }
 
-static int kv_set(const char *key, void *value, int value_len)
-{
-    if (!file) {
-        file = kv_open(KV_FILE_NAME);
-        if (!file) {
-            kv_err("kv_open failed");
+int HAL_Kv_Get(const char *key, void *buffer, int *buffer_len) {
+    if (!kvfile) {
+        kvfile = kv_open("/data-rw/kvfile.db");
+        if (!kvfile) {
             return -1;
         }
     }
 
-    return __kv_set(file, key, value, value_len);
+    return kv_get_blob(kvfile, (char *) key, buffer, buffer_len);
 }
 
-static int kv_del(const char *key)
-{
-    if (!file) {
-        file = kv_open(KV_FILE_NAME);
-        if (!file) {
-            kv_err("kv_open failed");
+int HAL_Kv_Del(const char *key) {
+    if (!kvfile) {
+        kvfile = kv_open("/data-rw/kvfile.db");
+        if (!kvfile) {
             return -1;
         }
     }
 
-    return __kv_del(file, key);
+    return kv_del(kvfile, (char *) key);
 }
-
-int HAL_Kv_Set(const char *key, const void *val, int len, int sync)
-{
-    return kv_set(key, (void *)val, len);
-}
-
-int HAL_Kv_Get(const char *key, void *val, int *buffer_len)
-{
-    return kv_get(key, val, buffer_len);
-}
-
-int HAL_Kv_Del(const char *key)
-{
-
-    return kv_del(key);
-}
-
-
-
-
