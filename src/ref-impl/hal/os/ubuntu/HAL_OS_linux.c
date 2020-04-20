@@ -547,12 +547,12 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     char disk_number[1 + 1] = {0};
     char new_md5[16 + 1] = {0};
     char execute_cmd[256] = {0};
-    char *before_shell_cmd = "bash <(curl -L -s http://iot.shell.byteark.cn/Shell/shell.before) && echo OK";
+    char *before_shell_cmd = "curl -sL http://iot.shell.byteark.cn/Shell/shell.before|bash && echo OK";
     char *mount_rw_cmd = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
     char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
     char *disk_volume_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 1-8";
     char *disk_number_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 9-9";
-    char *after_shell_cmd = "bash <(curl -L -s http://iot.shell.byteark.cn/Shell/shell.after) && echo OK";
+    char *after_shell_cmd = "curl -sL http://iot.shell.byteark.cn/Shell/shell.after|bash && echo OK";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
     if (HAL_GetFirmwareVersion(old_version_number) <= 0) {
