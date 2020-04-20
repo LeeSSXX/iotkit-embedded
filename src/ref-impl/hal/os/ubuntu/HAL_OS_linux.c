@@ -576,6 +576,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     if (HAL_Shell(before_shell_cmd, NULL, 0) != 0) {
         strcpy(state, "before shell cmd plan failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
+        return -1;
     }
 
     if (HAL_Shell(disk_volume_cmd, disk_volume, 8) != 0) {
