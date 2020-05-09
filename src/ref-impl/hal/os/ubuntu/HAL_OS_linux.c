@@ -327,7 +327,7 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
     FILE *fp;
     char verbuf[FIRMWARE_VERSION_MAXLEN] = {0};
     char md5buf[16 + 1] = {0};
-    fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`2", "r");
+    fp = popen("e2label `mount|grep cdrom|awk '{print substr($1,1,length($1)-1)}'`2", "r");
     if (NULL != fp) {
         if (fgets(verbuf, sizeof(verbuf), fp) == NULL) {
             strcpy(verbuf, "v0.0.0\n");
@@ -337,7 +337,7 @@ int HAL_GetFirmwareVersion(_OU_ char *version) {
         strcpy(verbuf, "v0.0.0\n");
     }
     verbuf[strlen(verbuf) - 1] = '\0';
-    fp = popen("e2label `mount|grep cdrom|awk '{print $1}'|cut -c 1-8`3", "r");
+    fp = popen("e2label `mount|grep cdrom|awk '{print substr($1,1,length($1)-1)}'`3", "r");
     if (NULL != fp) {
         if (fgets(md5buf, sizeof(md5buf), fp) == NULL) {
             strcpy(md5buf, "0000000000000000");
@@ -543,15 +543,18 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     memset(state, 0x0, 128);
     char old_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
     char new_version_number[FIRMWARE_VERSION_MAXLEN] = {0};
-    char disk_volume[8 + 1] = {0};
+    enum DISKTYPE {
+        SDA, NVME
+    } disktype;
+    char disk_volume[13 + 1] = {0};
     char disk_number[1 + 1] = {0};
     char new_md5[16 + 1] = {0};
     char execute_cmd[256] = {0};
     char *before_shell_cmd = "curl -sL http://iot.shell.byteark.cn/Shell/shell.before|bash && echo OK";
     char *mount_rw_cmd = "mount -o remount,rw /cdrom >/dev/null 2>&1 && echo OK";
     char *mount_ro_cmd = "mount -o remount,ro /cdrom >/dev/null 2>&1 && echo OK";
-    char *disk_volume_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 1-8";
-    char *disk_number_cmd = "mount|grep cdrom|awk '{print $1}'|cut -c 9-9";
+    char *disk_volume_cmd = "mount|grep cdrom|awk '{print substr($1,1,length($1)-1)}'";
+    char *disk_number_cmd = "mount|grep cdrom|awk '{print substr($1,length($1),length($1))}'";
     char *after_shell_cmd = "curl -sL http://iot.shell.byteark.cn/Shell/shell.after|bash && echo OK";
     char *reboot_cmd = "shutdown -r 3 > /dev/null 2>&1 && echo OK";
 
@@ -579,7 +582,7 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         return -1;
     }
 
-    if (HAL_Shell(disk_volume_cmd, disk_volume, 8) != 0) {
+    if (HAL_Shell(disk_volume_cmd, disk_volume, 12) != 0) {
         strcpy(state, "disk_volume_cmd execute failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
@@ -590,11 +593,23 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
         return -1;
     }
-
+    if (strstr(disk_volume, "nvme") != NULL) {
+        disk_volume[13] = '\0';
+        disktype = NVME;
+    } else {
+        disk_volume[8] = '\0';
+        disktype = SDA;
+    }
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd),
-             "mkfs.ext4 -F %s%d >/dev/null 2>&1 && echo OK", disk_volume,
-             atoi(disk_number) == 3 ? 2 : 3);
+    if (disktype == SDA) {
+        snprintf(execute_cmd, sizeof(execute_cmd),
+                 "mkfs.ext4 -F %s%d >/dev/null 2>&1 && echo OK", disk_volume,
+                 atoi(disk_number) == 3 ? 2 : 3);
+    } else if (disktype == NVME) {
+        snprintf(execute_cmd, sizeof(execute_cmd),
+                 "mkfs.ext4 -F %sp%d >/dev/null 2>&1 && echo OK", disk_volume,
+                 atoi(disk_number) == 3 ? 2 : 3);
+    }
     if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
         strcpy(state, "mkfs.ext4 disk failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
@@ -602,9 +617,17 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     }
 
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "[ -d /os ] ||  mkdir /os && mount %s%d /os >/dev/null 2>&1 && echo OK",
-             disk_volume,
-             atoi(disk_number) == 3 ? 2 : 3);
+    if (disktype == SDA) {
+        snprintf(execute_cmd, sizeof(execute_cmd),
+                 "[ -d /os ] ||  mkdir /os && mount %s%d /os >/dev/null 2>&1 && echo OK",
+                 disk_volume,
+                 atoi(disk_number) == 3 ? 2 : 3);
+    } else if (disktype == NVME) {
+        snprintf(execute_cmd, sizeof(execute_cmd),
+                 "[ -d /os ] ||  mkdir /os && mount %sp%d /os >/dev/null 2>&1 && echo OK",
+                 disk_volume,
+                 atoi(disk_number) == 3 ? 2 : 3);
+    }
     if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
         strcpy(state, "mount disk failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
@@ -662,8 +685,13 @@ int HAL_Firmware_Persistence_Stop(char *new_version, char *ota_md5, _OU_ char *s
     }
 
     memset(execute_cmd, 0x0, sizeof(execute_cmd));
-    snprintf(execute_cmd, sizeof(execute_cmd), "e2label %s2 %s && e2label %s3 %s 2>&1 && echo OK", disk_volume,
-             new_version_before_half, disk_volume, new_md5);
+    if (disktype == SDA) {
+        snprintf(execute_cmd, sizeof(execute_cmd), "e2label %s2 %s && e2label %s3 %s 2>&1 && echo OK", disk_volume,
+                 new_version_before_half, disk_volume, new_md5);
+    } else if (disktype == NVME) {
+        snprintf(execute_cmd, sizeof(execute_cmd), "e2label %sp2 %s && e2label %sp3 %s 2>&1 && echo OK", disk_volume,
+                 new_version_before_half, disk_volume, new_md5);
+    }
     if (HAL_Shell(execute_cmd, NULL, 0) != 0) {
         strcpy(state, "e2label update version failed\n");
         hal_warning("HAL_Firmware_Persistence_Stop:%s", state);
